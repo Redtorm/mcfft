@@ -44,8 +44,8 @@ double get_error(double *tested, double *standard, int n, int n_batch)
             //     printf("%d...%d\n" , i, j);
             // }
         }
-    for (int i = 0; i < 256*256; ++i){
-        printf("%e ... %e\n" , tested[i], standard[i]);
+    for (int i = 0; i < 131072; ++i){
+       // printf("%e ... %e\n" , tested[i], standard[i]);
         // if(std::abs((tested[i]-standard[i]))>1){
         //     printf("%f...\n" , tested[i]-standard[i]);
         // }

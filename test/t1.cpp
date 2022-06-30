@@ -114,11 +114,11 @@ __global__ void mul(Myhalf *inA, Myhalf *inB){
     rocwmma::fill_fragment(matrixC, f);
     rocwmma::load_matrix_sync(matrixA, inA, 16);
     rocwmma::load_matrix_sync(matrixB, inB, 16);
-    rocwmma::load_matrix_sync(matrixE, inA, 16);
+    rocwmma::load_matrix_sync(matrixE, inB, 16);
 
     rocwmma::mma_sync(matrixC, matrixA, matrixB, matrixC);
 
-   // rocwmma::store_matrix_sync(smem_in, matrixC, 16, rocwmma::mem_row_major);
+    rocwmma::store_matrix_sync(smem_in, matrixC, 16, rocwmma::mem_row_major);
 
     rocwmma::load_matrix_sync(matrixD, smem_in, 16);
 
@@ -130,8 +130,8 @@ __global__ void mul(Myhalf *inA, Myhalf *inB){
     // if(threadIdx.x == 16)
     // printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
 
-    // int raw_col = threadIdx.x % 16;
-    // int raw_row = threadIdx.x / 16 * 4;
+    int raw_col = threadIdx.x % 16;
+    int raw_row = threadIdx.x / 16 * 4;
     
 
     // if(threadIdx.x == 0)
@@ -144,7 +144,7 @@ __global__ void mul(Myhalf *inA, Myhalf *inB){
     //     Myhalf sss = matrixC.x[i];
     //     Myhalf ssss = matrixD.x[i];
         
-    //     //printf("threadIDx:%d Data:%f >>>> %f >>> %f >>> %f (row:%d, col:%d)\n", tId, s, ss, sss, ssss, row, col);
+    //     printf("threadIDx:%d Data:A%f >>>> B%f >>> C%f >>> %f (row:%d, col:%d)\n", tId, s, ss, sss, ssss, row, col);
     //     //smem_in[row * 16 + col]
     // }
 
@@ -157,14 +157,17 @@ __global__ void mul(Myhalf *inA, Myhalf *inB){
     // printf("%d  %d\n", res1, res2);
     
 
-    // int cc=0;
-    // for(int i =0; i<16;++i){
-    //     cc=cc+(i+1)*(i*16+1);
-    // }
-    // printf("threadI: Data:>>%d\n", cc);
+    int cc=0;
+    for(int i =0; i<16;++i){
+        cc=cc+(i+1)*(i*16+2);
+    }
+    if(threadIdx.x == 0)
+    printf("threadI: Data:>>%d\n", cc);
 
     float2 aaa = {1.0, 2.0};
-    printf("%f, %f", aaa.x, aaa.y);
+    float2 bbb = {3.0, 4.0};
+    float2 ccc = __fadd2(aaa,bbb);
+    printf("%f, %f", ccc.x, ccc.y);
 
 }
 

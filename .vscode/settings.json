@@ -4,6 +4,12 @@
     "files.associations": {
         "*.ipp": "cpp",
         "functional": "cpp",
-        "__locale": "cpp"
+        "__locale": "cpp",
+        "random": "cpp",
+        "array": "cpp",
+        "string": "cpp",
+        "string_view": "cpp",
+        "iterator": "cpp",
+        "vector": "cpp"
     }
 }

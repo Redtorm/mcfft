@@ -28,29 +28,37 @@ complex_mul(rocwmma::fragment<rocwmma::matrix_a, rocwmma_M, rocwmma_N, rocwmma_K
     rocwmma::mma_sync(frag_out_imag, frag_F_imag, frag_in_real, frag_out_imag);
 }
 
-__device__ __host__ inline FloatComplex W_N_K(int N, int K, int M)
+__device__ __host__ inline float2 W_N_K(int N, int K, int M)
 {
-    FloatComplex res;
-    res.x = cosf(2 * M_PI * K * M / N);
-    res.y = -sinf(2 * M_PI * K * M / N);
-    return res;
+    float2 t = {cosf(2 * M_PI * K * M / N), -sinf(2 * M_PI * K * M / N)};
+    return t;
 }
 
 
-__device__ inline FloatComplex cmul(FloatComplex a, FloatComplex b)
+__device__ inline float2 cmul(float2 a, float2 b)
 {
-    FloatComplex c;
-    c.x = a.x * b.x - a.y * b.y;
-    c.y = a.x * b.y + a.y * b.x;
-    return c;
+    float2 t = {a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x};
+    return t;
+}
+
+__device__ inline float2 cadd(float2 a, float2 b)
+{
+    float2 t = {a.x + b.x, a.y + b.y};
+    return t;
+}
+
+__device__ inline float2 csub(float2 a, float2 b)
+{
+    float2 t = {a.x - b.x, a.y - b.y};
+    return t;
 }
 
 
 template <int CONT_SIZE, int NUM_WARP>
-__global__ void layer_256_0(float* in_real, float* in_imag, float* F_real, float* F_imag)
+__global__ void layer_256_0(float2* data, float* F_real, float* F_imag)
 {
     //__shared__ half smem_in[256 * 2 * 32];
-    extern __shared__ float smem_in[];
+    extern __shared__ float2 smem[];
     int tid_block  = threadIdx.x + threadIdx.y * blockDim.x;
     int block_start = blockIdx.x * 256 * CONT_SIZE;
 
@@ -60,9 +68,7 @@ __global__ void layer_256_0(float* in_real, float* in_imag, float* F_real, float
     rocwmma::load_matrix_sync(frag_F_real, F_real, 16);
     rocwmma::load_matrix_sync(frag_F_imag, F_imag, 16);
 
-
-
-    for (int i = 0; i < 256 * CONT_SIZE; i += NUM_WARP * 16 * 16)
+    for (int i = 0; i < 256 * CONT_SIZE; i += NUM_WARP * 256)
     {
         rocwmma::fragment<rocwmma::accumulator, rocwmma_M, rocwmma_N, rocwmma_K, float> frag_out_real;
         rocwmma::fragment<rocwmma::accumulator, rocwmma_M, rocwmma_N, rocwmma_K, float> frag_out_imag;
@@ -71,256 +77,261 @@ __global__ void layer_256_0(float* in_real, float* in_imag, float* F_real, float
 
         int raw_col = threadIdx.x % 16;
         int raw_row = threadIdx.x / 16 * 4;
-        FloatComplex twiddle_unit = W_N_K(256, raw_col, raw_row);
-        FloatComplex twiddle_factor = W_N_K(256, raw_col, 1);
+        float2 twiddle_unit = W_N_K(256, raw_col, raw_row);
+        float2 twiddle_factor = W_N_K(256, raw_col, 1);
 
-        int warp_start_smem = i * 2 + threadIdx.y * 256 * 2;
-        int warp_start_gmem = i + threadIdx.y * 256;
-        rocwmma::load_matrix_sync(frag_in_real, (float*)(in_real + block_start + warp_start_gmem), 16);
-        rocwmma::load_matrix_sync(frag_in_imag, (float*)(in_imag + block_start + warp_start_gmem), 16);
+        int warp_start = i + threadIdx.y * 256;
 
+        for(int j = 0; j < 4; j++){
+            int col = raw_col;
+            int row = raw_row + j;
+            int eid_global = block_start + warp_start + col * 16 + row;
+            float2 ele = data[eid_global];
+            frag_in_real.x[j] = ele.x;
+            frag_in_imag.x[j] = ele.y;
 
-        complex_mul(frag_F_real, frag_F_imag, frag_in_real, frag_in_imag, frag_out_real, frag_out_imag);
-
-
-        rocwmma::store_matrix_sync(smem_in + warp_start_smem, frag_out_real, 16, rocwmma::mem_row_major);
-        rocwmma::store_matrix_sync(smem_in + warp_start_smem + 256, frag_out_imag, 16, rocwmma::mem_row_major);
-
-        rocwmma::load_matrix_sync(frag_in_real, (float*)(smem_in + warp_start_smem), 16);
-        rocwmma::load_matrix_sync(frag_in_imag, (float*)(smem_in + warp_start_smem) + 256, 16);
-
-
-        
-        for (int j = 0; j < 4; ++j)
-        {
-            FloatComplex in_ele;
-            in_ele.x = frag_in_real.x[j];
-            in_ele.y = frag_in_imag.x[j];
-
-            in_ele = cmul(in_ele, twiddle_unit);
-
-            frag_in_real.x[j] = in_ele.x;
-            frag_in_imag.x[j] = in_ele.y;
-            twiddle_unit = cmul(twiddle_unit, twiddle_factor);
         }
 
+
         complex_mul(frag_F_real, frag_F_imag, frag_in_real, frag_in_imag, frag_out_real, frag_out_imag);
 
-        rocwmma::store_matrix_sync(smem_in + warp_start_smem, frag_out_real, 16, rocwmma::mem_row_major);
-        rocwmma::store_matrix_sync(smem_in + warp_start_smem + 256, frag_out_imag, 16, rocwmma::mem_row_major);
-    }
+        for(int j = 0; j < 4; j++){
+            int col = raw_col;
+            int row = raw_row + j;
+            int eid_block = warp_start + col * 16 + row;
+            smem[eid_block] = {frag_out_real.x[j], frag_out_imag.x[j]};
 
-    __syncthreads();
-    int num = 0;
-    for (int i = 0; i < 256 * CONT_SIZE; i += NUM_WARP * 64)
-    {
-        int eid = i + tid_block;
-        int stride = NUM_WARP * 64 * 2;
-        int t = tid_block / 256;
-        int smem_posi = num * stride + t * (512 - 256) + tid_block;
-        in_real[block_start + eid] = smem_in[smem_posi];
-        in_imag[block_start + eid] = smem_in[smem_posi + 256];
-        num++;
-    }
+        }
 
+        __syncthreads();
+
+
+        for(int j = 0; j < 4; j++){
+
+            int col = raw_col;
+            int row = raw_row + j;
+            int eid_block = warp_start + row * 16 + col;
+
+            float2 ele = smem[eid_block]; 
+            
+            ele = cmul(ele, twiddle_unit);
+            frag_in_real.x[j] = ele.x;
+            frag_in_imag.x[j] = ele.y;
+
+            twiddle_unit = cmul(twiddle_unit, twiddle_factor);
+        }
+        
+
+        complex_mul(frag_F_real, frag_F_imag, frag_in_real, frag_in_imag, frag_out_real, frag_out_imag);
+
+        for(int j = 0; j < 4; j++){
+            int col = raw_col;
+            int row = raw_row + j;
+            int eid_global = block_start + warp_start + row * 16 + col;
+            data[eid_global] = {frag_out_real.x[j], frag_out_imag.x[j]};
+        }
+    }
 }
 
 template <int CONT_SIZE, int NUM_WARP>
-__global__ void layer_512_0(float* in_real, float* in_imag, float* F_real, float* F_imag)
+__global__ void layer_512_0(float2* data, float* F_real, float* F_imag)
 {
-    extern __shared__ float smem_in[];
-    int tid_block = threadIdx.x + threadIdx.y * blockDim.x;
+    extern __shared__ float2 smem[];
+    int tid_block  = threadIdx.x + threadIdx.y * blockDim.x;
     int block_start = blockIdx.x * 512 * CONT_SIZE;
 
-    uint32_t waveIndex = threadIdx.y;
 
     rocwmma::fragment<rocwmma::matrix_a, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::row_major> frag_F_real;
     rocwmma::fragment<rocwmma::matrix_a, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::row_major> frag_F_imag;
     rocwmma::load_matrix_sync(frag_F_real, F_real, 16);
     rocwmma::load_matrix_sync(frag_F_imag, F_imag, 16);
 
-    for (int i = 0; i < 512 * CONT_SIZE; i += NUM_WARP * 16 * 16)
+    for (int i = 0; i < 512 * CONT_SIZE; i += NUM_WARP * 256)
     {
         rocwmma::fragment<rocwmma::accumulator, rocwmma_M, rocwmma_N, rocwmma_K, float> frag_out_real;
         rocwmma::fragment<rocwmma::accumulator, rocwmma_M, rocwmma_N, rocwmma_K, float> frag_out_imag;
         rocwmma::fragment<rocwmma::matrix_b, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::col_major> frag_in_real;
         rocwmma::fragment<rocwmma::matrix_b, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::col_major> frag_in_imag;
-        rocwmma::fragment<rocwmma::matrix_b, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::col_major> frag_in_tmp0;
-        rocwmma::fragment<rocwmma::matrix_b, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::col_major> frag_in_tmp1;
 
         int raw_col = threadIdx.x % 16;
         int raw_row = threadIdx.x / 16 * 4;
-        FloatComplex twiddle_unit = W_N_K(256, raw_col, raw_row);
-        FloatComplex twiddle_factor = W_N_K(256, raw_col, 1);
+        float2 twiddle_unit = W_N_K(256, raw_col, raw_row);
+        float2 twiddle_factor = W_N_K(256, raw_col, 1);
 
-        int warp_start_smem = i * 2 + threadIdx.y * 256 * 2;
-        int warp_start_gmem = i + threadIdx.y * 256;
-        rocwmma::load_matrix_sync(frag_in_real, (float*)(in_real + block_start + warp_start_gmem), 16);
-        rocwmma::load_matrix_sync(frag_in_imag, (float*)(in_imag + block_start + warp_start_gmem), 16);
+        int warp_start = i + threadIdx.y * 256;
+
+        for(int j = 0; j < 4; j++){
+            int col = raw_col;
+            int row = raw_row + j;
+            int eid_global = block_start + warp_start + col * 16 + row;
+            float2 ele = data[eid_global];
+            frag_in_real.x[j] = ele.x;
+            frag_in_imag.x[j] = ele.y;
+
+        }
+
 
         complex_mul(frag_F_real, frag_F_imag, frag_in_real, frag_in_imag, frag_out_real, frag_out_imag);
 
-        rocwmma::store_matrix_sync(smem_in + warp_start_smem, frag_out_real, 16, rocwmma::mem_row_major);
-        rocwmma::store_matrix_sync(smem_in + warp_start_smem + 256, frag_out_imag, 16, rocwmma::mem_row_major);
+        for(int j = 0; j < 4; j++){
+            int col = raw_col;
+            int row = raw_row + j;
+            int eid_block = warp_start + col * 16 + row;
+            smem[eid_block] = {frag_out_real.x[j], frag_out_imag.x[j]};
 
-        rocwmma::load_matrix_sync(frag_in_real, (float*)(smem_in + warp_start_smem), 16);
-        rocwmma::load_matrix_sync(frag_in_imag, (float*)(smem_in + warp_start_smem) + 256, 16);
-
-        
-        for (int j = 0; j < 4; ++j)
-        {
-            FloatComplex in_ele;
-            in_ele.x = frag_in_real.x[j];
-            in_ele.y = frag_in_imag.x[j];
-
-            in_ele = cmul(in_ele, twiddle_unit);
-
-            frag_in_real.x[j] = in_ele.x;
-            frag_in_imag.x[j] = in_ele.y;
-            twiddle_unit = cmul(twiddle_unit, twiddle_factor);
         }
 
-       complex_mul(frag_F_real, frag_F_imag, frag_in_real, frag_in_imag, frag_out_real, frag_out_imag);
+        __syncthreads();
 
-        rocwmma::store_matrix_sync(smem_in + warp_start_smem, frag_out_real, 16, rocwmma::mem_row_major);
-        rocwmma::store_matrix_sync(smem_in + warp_start_smem + 256, frag_out_imag, 16, rocwmma::mem_row_major);
 
+        for(int j = 0; j < 4; j++){
+
+            int col = raw_col;
+            int row = raw_row + j;
+            int eid_block = warp_start + row * 16 + col;
+
+            float2 ele = smem[eid_block]; 
+            
+            ele = cmul(ele, twiddle_unit);
+            frag_in_real.x[j] = ele.x;
+            frag_in_imag.x[j] = ele.y;
+
+            twiddle_unit = cmul(twiddle_unit, twiddle_factor);
+        }
+        
+
+        complex_mul(frag_F_real, frag_F_imag, frag_in_real, frag_in_imag, frag_out_real, frag_out_imag);
+
+        for(int j = 0; j < 4; j++){
+            int col = raw_col;
+            int row = raw_row + j;
+            int eid_block = warp_start + row * 16 + col;
+            smem[eid_block] = {frag_out_real.x[j], frag_out_imag.x[j]}; 
+        }
     }
 
     __syncthreads();
-    int num = 0;
-    FloatComplex twiddle_512;
-    twiddle_512 = W_N_K(512, tid_block % 256, 1);
 
-    for (int i = 0; i < 512 * CONT_SIZE; i += NUM_WARP * 64 * 2)
-    {
-        int stride = NUM_WARP * 64 * 4;
+    float2 twiddle_512 = W_N_K(512, tid_block % 256, 1);
+    for(int i = 0; i < 512 * CONT_SIZE; i += NUM_WARP * 64 * 2){
         int t = tid_block / 256;
-        int eid = i + (512 - 256) * t + tid_block;
-        int smem_posi = num * stride + t * (1024 - 256) + tid_block;
-        FloatComplex ele_0, ele_1;
-        ele_0.x = smem_in[smem_posi];
-        ele_0.y = smem_in[smem_posi + 256];
-        ele_1.x = smem_in[smem_posi + 512];
-        ele_1.y = smem_in[smem_posi + 512 + 256];
-        ele_1 = cmul(ele_1, twiddle_512);
-        in_real[block_start + eid] = ele_0.x + ele_1.x;
-        in_imag[block_start + eid] = ele_0.y + ele_1.y;
-        in_real[block_start + eid + 256] = ele_0.x - ele_1.x;
-        in_imag[block_start + eid + 256] = ele_0.y - ele_1.y;
-        num++;
+        int eid_block = i + (512 - 256) * t + tid_block;
+        float2 ele_0 = smem[eid_block];
+        float2 ele_1 = cmul(smem[eid_block + 256], twiddle_512);
+        data[block_start + eid_block] = cadd(ele_0, ele_1);
+        data[block_start + eid_block + 256] = csub(ele_0, ele_1);
     }
 }
 
 template <int CONT_SIZE, int NUM_WARP>
-__global__ void layer_1024_0(float* in_real, float* in_imag, float* F_real, float* F_imag)
+__global__ void layer_1024_0(float2* data, float* F_real, float* F_imag)
 {
-    extern __shared__ float smem_in[];
-    int tid_block = threadIdx.x + threadIdx.y * blockDim.x;
+    extern __shared__ float2 smem[];
+    int tid_block  = threadIdx.x + threadIdx.y * blockDim.x;
     int block_start = blockIdx.x * 1024 * CONT_SIZE;
 
-    uint32_t waveIndex = threadIdx.y;
 
     rocwmma::fragment<rocwmma::matrix_a, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::row_major> frag_F_real;
     rocwmma::fragment<rocwmma::matrix_a, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::row_major> frag_F_imag;
     rocwmma::load_matrix_sync(frag_F_real, F_real, 16);
     rocwmma::load_matrix_sync(frag_F_imag, F_imag, 16);
 
-    for (int i = 0; i < 1024 * CONT_SIZE; i += NUM_WARP * 16 * 16)
+    for (int i = 0; i < 1024 * CONT_SIZE; i += NUM_WARP * 256)
     {
         rocwmma::fragment<rocwmma::accumulator, rocwmma_M, rocwmma_N, rocwmma_K, float> frag_out_real;
         rocwmma::fragment<rocwmma::accumulator, rocwmma_M, rocwmma_N, rocwmma_K, float> frag_out_imag;
         rocwmma::fragment<rocwmma::matrix_b, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::col_major> frag_in_real;
         rocwmma::fragment<rocwmma::matrix_b, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::col_major> frag_in_imag;
-        rocwmma::fragment<rocwmma::matrix_b, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::col_major> frag_in_tmp0;
-        rocwmma::fragment<rocwmma::matrix_b, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::col_major> frag_in_tmp1;
 
         int raw_col = threadIdx.x % 16;
         int raw_row = threadIdx.x / 16 * 4;
-        FloatComplex twiddle_unit = W_N_K(256, raw_col, raw_row);
-        FloatComplex twiddle_factor = W_N_K(256, raw_col, 1);
+        float2 twiddle_unit = W_N_K(256, raw_col, raw_row);
+        float2 twiddle_factor = W_N_K(256, raw_col, 1);
 
-        int warp_start_smem = i * 2 + threadIdx.y * 256 * 2;
-        int warp_start_gmem = i + threadIdx.y * 256;
-        rocwmma::load_matrix_sync(frag_in_real, (float*)(in_real + block_start + warp_start_gmem), 16);
-        rocwmma::load_matrix_sync(frag_in_imag, (float*)(in_imag + block_start + warp_start_gmem), 16);
+        int warp_start = i + threadIdx.y * 256;
+
+        for(int j = 0; j < 4; j++){
+            int col = raw_col;
+            int row = raw_row + j;
+            int eid_global = block_start + warp_start + col * 16 + row;
+            float2 ele = data[eid_global];
+            frag_in_real.x[j] = ele.x;
+            frag_in_imag.x[j] = ele.y;
+
+        }
+
 
         complex_mul(frag_F_real, frag_F_imag, frag_in_real, frag_in_imag, frag_out_real, frag_out_imag);
 
-        rocwmma::store_matrix_sync(smem_in + warp_start_smem, frag_out_real, 16, rocwmma::mem_row_major);
-        rocwmma::store_matrix_sync(smem_in + warp_start_smem + 256, frag_out_imag, 16, rocwmma::mem_row_major);
+        for(int j = 0; j < 4; j++){
+            int col = raw_col;
+            int row = raw_row + j;
+            int eid_block = warp_start + col * 16 + row;
+            smem[eid_block] = {frag_out_real.x[j], frag_out_imag.x[j]};
 
-        rocwmma::load_matrix_sync(frag_in_real, (float*)(smem_in + warp_start_smem), 16);
-        rocwmma::load_matrix_sync(frag_in_imag, (float*)(smem_in + warp_start_smem) + 256, 16);
-
-        
-        for (int j = 0; j < 4; ++j)
-        {
-            FloatComplex in_ele;
-            in_ele.x = frag_in_real.x[j];
-            in_ele.y = frag_in_imag.x[j];
-
-            in_ele = cmul(in_ele, twiddle_unit);
-
-            frag_in_real.x[j] = in_ele.x;
-            frag_in_imag.x[j] = in_ele.y;
-            twiddle_unit = cmul(twiddle_unit, twiddle_factor);
         }
 
-       complex_mul(frag_F_real, frag_F_imag, frag_in_real, frag_in_imag, frag_out_real, frag_out_imag);
+        __syncthreads();
 
-        rocwmma::store_matrix_sync(smem_in + warp_start_smem, frag_out_real, 16, rocwmma::mem_row_major);
-        rocwmma::store_matrix_sync(smem_in + warp_start_smem + 256, frag_out_imag, 16, rocwmma::mem_row_major);
 
+        for(int j = 0; j < 4; j++){
+
+            int col = raw_col;
+            int row = raw_row + j;
+            int eid_block = warp_start + row * 16 + col;
+
+            float2 ele = smem[eid_block]; 
+            
+            ele = cmul(ele, twiddle_unit);
+            frag_in_real.x[j] = ele.x;
+            frag_in_imag.x[j] = ele.y;
+
+            twiddle_unit = cmul(twiddle_unit, twiddle_factor);
+        }
+        
+
+        complex_mul(frag_F_real, frag_F_imag, frag_in_real, frag_in_imag, frag_out_real, frag_out_imag);
+
+        for(int j = 0; j < 4; j++){
+            int col = raw_col;
+            int row = raw_row + j;
+            int eid_block = warp_start + row * 16 + col;
+            smem[eid_block] = {frag_out_real.x[j], frag_out_imag.x[j]}; 
+        }
     }
 
     __syncthreads();
-    int num = 0;
-    FloatComplex twiddle_1024_1 = W_N_K(1024, tid_block % 256, 1);
-    FloatComplex twiddle_1024_2 = cmul(twiddle_1024_1, twiddle_1024_1);
-    FloatComplex twiddle_1024_3 = cmul(twiddle_1024_2, twiddle_1024_1);
 
-    for (int i = 0; i < 1024 * CONT_SIZE; i += NUM_WARP * 64 * 4)
-    {
-        int stride = NUM_WARP * 64 * 8;
+    float2 twiddle_1024_1 = W_N_K(1024, tid_block % 256, 1);
+    float2 twiddle_1024_2 = cmul(twiddle_1024_1, twiddle_1024_1);
+    float2 twiddle_1024_3 = cmul(twiddle_1024_2, twiddle_1024_1);
+
+    for(int i = 0; i < 1024 * CONT_SIZE; i += NUM_WARP * 64 * 2){
         int t = tid_block / 256;
-        int eid = i + (1024 - 256) * t + tid_block;
-        int smem_posi = num * stride + t * (2048 - 256) + tid_block;
+        int eid_block = i + (1024 - 256) * t + tid_block;
+        float2 ele_0 = smem[eid_block];
+        float2 ele_1 = smem[eid_block + 256];
+        float2 ele_2 = smem[eid_block + 512];
+        float2 ele_3 = smem[eid_block + 768];
 
-        FloatComplex ele_0, ele_1, ele_2, ele_3;
-        ele_0.x = smem_in[smem_posi];
-        ele_0.y = smem_in[smem_posi + 256];
-        ele_1.x = smem_in[smem_posi + 512];
-        ele_1.y = smem_in[smem_posi + 512 + 256];
-        ele_2.x = smem_in[smem_posi + 1024];
-        ele_2.y = smem_in[smem_posi + 1024 + 256];
-        ele_3.x = smem_in[smem_posi + 1536];
-        ele_3.y = smem_in[smem_posi + 1536 + 256];
         ele_1 = cmul(ele_1, twiddle_1024_1);
         ele_2 = cmul(ele_2, twiddle_1024_2);
-        ele_3 = cmul(ele_3, twiddle_1024_3); 
-        in_real[block_start + eid] = ele_0.x + ele_1.x + ele_2.x + ele_3.x;
-        in_imag[block_start + eid] = ele_0.y + ele_1.y + ele_2.y + ele_3.y;
-        in_real[block_start + eid + 256] = ele_0.x + ele_1.y - ele_2.x - ele_3.y;
-        in_imag[block_start + eid + 256] = ele_0.y - ele_1.x - ele_2.y + ele_3.x;
-        in_real[block_start + eid + 512] = ele_0.x - ele_1.x + ele_2.x - ele_3.x;
-        in_imag[block_start + eid + 512] = ele_0.y - ele_1.y + ele_2.y - ele_3.y;
-        in_real[block_start + eid + 768] = ele_0.x - ele_1.y - ele_2.x + ele_3.y;
-        in_imag[block_start + eid + 768] = ele_0.y + ele_1.x - ele_2.y - ele_3.x;
-        num++;
+        ele_3 = cmul(ele_3, twiddle_1024_3);
+
+        data[block_start + eid_block] = {ele_0.x + ele_1.x + ele_2.x + ele_3.x, ele_0.y + ele_1.y + ele_2.y + ele_3.y};
+        data[block_start + eid_block + 256] = {ele_0.x + ele_1.y - ele_2.x - ele_3.y, ele_0.y - ele_1.x - ele_2.y + ele_3.x};
+        data[block_start + eid_block + 512] = {ele_0.x - ele_1.x + ele_2.x - ele_3.x, ele_0.y - ele_1.y + ele_2.y - ele_3.y};
+        data[block_start + eid_block + 768] = {ele_0.x - ele_1.y - ele_2.x + ele_3.y, ele_0.y + ele_1.x - ele_2.y - ele_3.x};
     }
 }
 
 template <int CONT_SIZE, int NUM_WARP>
-__global__ void layer_256_1(int step, float* in_real, float* in_imag, float* F_real, float* F_imag){
-    int imag_start = CONT_SIZE * 256;
-    extern __shared__ float smem[];
+__global__ void layer_256_1(int step, float2* data, float* F_real, float* F_imag){
+
+    extern __shared__ float2 smem[];
 
     int tid_block = threadIdx.x + threadIdx.y * blockDim.x;
     int block_start = blockIdx.y * step * 256 + blockIdx.x * CONT_SIZE;
-
-    uint32_t waveIndex = threadIdx.y;
-
 
     //chunk num per cont
     int chunk_num = CONT_SIZE / 16;
@@ -339,8 +350,8 @@ __global__ void layer_256_1(int step, float* in_real, float* in_imag, float* F_r
         int raw_col = threadIdx.x % 16;
         int raw_row = threadIdx.x / 16 * 4;
         int golbal_col = blockIdx.x * CONT_SIZE + threadIdx.y % chunk_num * 16 + raw_col;
-        FloatComplex twiddle_unit = W_N_K(step * 16, golbal_col, raw_row);
-        FloatComplex twiddle_factor = W_N_K(step * 16, golbal_col, 1);
+        float2 twiddle_unit = W_N_K(step * 16, golbal_col, raw_row);
+        float2 twiddle_factor = W_N_K(step * 16, golbal_col, 1);
 
         //warp start position in block
         int warp_start = i + threadIdx.y / chunk_num * chunk_num * 256 + threadIdx.y % chunk_num * 16;
@@ -354,12 +365,10 @@ __global__ void layer_256_1(int step, float* in_real, float* in_imag, float* F_r
             //element position in golbal memory
             int eid_global = block_start + eid_block / CONT_SIZE * step + eid_block % CONT_SIZE;
 
-            FloatComplex in_ele;
-            in_ele.x = in_real[eid_global];
-            in_ele.y = in_imag[eid_global];
+            float2 in_ele = data[eid_global];
 
-            
             in_ele = cmul(in_ele, twiddle_unit);
+
             frag_in_real.x[j] = in_ele.x;
             frag_in_imag.x[j] = in_ele.y;
 
@@ -374,8 +383,7 @@ __global__ void layer_256_1(int step, float* in_real, float* in_imag, float* F_r
             //element position in block
             int eid_block = warp_start + row * CONT_SIZE + col;
 
-            smem[eid_block] = frag_out_real.x[j];
-            smem[imag_start + eid_block] = frag_out_imag.x[j]; 
+            smem[eid_block] = {frag_out_real.x[j], frag_out_imag.x[j]};
         }
 
 
@@ -395,18 +403,15 @@ __global__ void layer_256_1(int step, float* in_real, float* in_imag, float* F_r
 
         //each block hold the same data as above, but the way of looking data has changed
         int golbal_col = blockIdx.x * CONT_SIZE + i * step * (16 * NUM_WARP / CONT_SIZE) + threadIdx.y / chunk_num * step + threadIdx.y % chunk_num * 16 + raw_col;
-        FloatComplex twiddle_unit = W_N_K(step * 256, golbal_col, raw_row);
-        FloatComplex twiddle_factor = W_N_K(step * 256, golbal_col, 1);
+        float2 twiddle_unit = W_N_K(step * 256, golbal_col, raw_row);
+        float2 twiddle_factor = W_N_K(step * 256, golbal_col, 1);
         for (int j = 0; j < 4; ++j){
             int col = raw_col;
             int row = raw_row + j;
             int row_length = CONT_SIZE * 16; 
             int eid_block = warp_start + row * row_length + col;
-            FloatComplex in_ele;
 
-
-            in_ele.x = smem[eid_block];
-            in_ele.y = smem[imag_start + eid_block];
+            float2 in_ele = smem[eid_block];
 
            // float aa = in_ele.x;
 
@@ -428,8 +433,7 @@ __global__ void layer_256_1(int step, float* in_real, float* in_imag, float* F_r
             int row = raw_row + j;
             int row_length = CONT_SIZE * 16;
             int eid_block = warp_start + row * row_length + col;
-            smem[eid_block] = frag_out_real[j];
-            smem[imag_start + eid_block] = frag_out_imag[j];
+            smem[eid_block] = {frag_out_real.x[j], frag_out_imag.x[j]};
 
             // int kkk = threadIdx.y;
             // int eeid_block = warp_start + row * CONT_SIZE + col;
@@ -442,14 +446,20 @@ __global__ void layer_256_1(int step, float* in_real, float* in_imag, float* F_r
     for (int i = 0; i < 256 * CONT_SIZE; i += NUM_WARP * 64)
     {
         int eid = i + tid_block;
-        in_real[block_start + eid / CONT_SIZE * step + eid % CONT_SIZE] = smem[eid];
-        in_imag[block_start + eid / CONT_SIZE * step + eid % CONT_SIZE] = smem[imag_start + eid];
+        data[block_start + eid / CONT_SIZE * step + eid % CONT_SIZE] = smem[eid];
     }
 }
 
-void mcfftExec(mcfftHandle plan, float* data_real, float* data_imag)
+void mcfftExec(mcfftHandle plan, float* data)
 {
-    const uint32_t num_warp = 16;
+
+    // for(int i = 0; i < 256; i++){
+    //     // if(threadIdx.x == 0 && threadIdx.y == 0){
+    //          printf("%f~~~~~~%f\n", data[2*i], data[2*i+1]);
+    //     // }
+    // }
+
+    const uint32_t num_warp = 8;
     const uint32_t n_cont[3] = { 32, 16, 8 };
 
     uint32_t step = 1;
@@ -485,8 +495,7 @@ void mcfftExec(mcfftHandle plan, float* data_real, float* data_imag)
                         hipFuncAttributeMaxDynamicSharedMemorySize, 
                         smem_size);
 
-    plan.layer_0[plan.mergings[0]]<<<blocks, threads, smem_size>>>((float*)data_real, 
-                                                                   (float*)data_imag, 
+    plan.layer_0[plan.mergings[0]]<<<blocks, threads, smem_size>>>((float2*)data, 
                                                                    plan.F_real, 
                                                                    plan.F_imag);
     step *= RADIX;
@@ -518,8 +527,7 @@ void mcfftExec(mcfftHandle plan, float* data_real, float* data_imag)
 
 
         plan.layer_1[plan.mergings[i]]<<<blocks, threads, smem_size>>>(step, 
-                                                                       (float*)data_real,
-                                                                       (float*)data_imag, 
+                                                                       (float2*)data, 
                                                                        plan.F_real, 
                                                                        plan.F_imag);
         step *= RADIX;
@@ -531,7 +539,7 @@ void mcfftCreate(mcfftHandle* plan, int n, int n_batch)
     plan->N = n;
     plan->N_batch = n_batch;
     // setup functions
-    const int num_warp = 16;
+    const int num_warp = 8;
     const int n_cont_256 = 32;
     const int n_cont_512 = 16;
     const int n_cont_1024 = 8;

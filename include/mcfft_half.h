@@ -17,19 +17,19 @@ typedef struct
     int n_radices;
     int mergings[3] = { 0, 0, 0 };
     int n_mergings;
-    void (*layer_0[3])(float*, float*, float*, float*);
-    void (*layer_1[3])(int, float*, float*, float*, float*);
+    void (*layer_0[3])(float2*, float*, float*);
+    void (*layer_1[3])(int, float2*, float*, float*);
     float* F_real, * F_imag;
     float* F_real_tmp, * F_imag_tmp;
 
 } mcfftHandle;
 
-typedef struct{
-    float x;
-    float y;
-} FloatComplex;
+// typedef struct{
+//     float x;
+//     float y;
+// } FloatComplex;
 
-void mcfftExec(mcfftHandle plan, float* data_real, float* data_imag);
+void mcfftExec(mcfftHandle plan, float* data);
 void mcfftCreate(mcfftHandle* plan, int n, int n_batch);
 
 #endif

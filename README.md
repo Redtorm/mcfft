@@ -1,0 +1,4 @@
+# MCFFT
+
+## Software Requirements
+- rocWMMA

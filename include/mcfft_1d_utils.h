@@ -1,9 +1,9 @@
-#ifndef __MCFFT_API_H__
-#define __MCFFT_API_H__
+#ifndef __MCFFT_1D_UTILS_H__
+#define __MCFFT_1D_UTILS_H__
 
 #define __HIP_PLATFORM_HCC__
 
-#include "mcfft_half.h"
+#include "mcfft_1d_device.h"
 
 void setup(double* data, int n, int n_batch);
 void doit(int iter);

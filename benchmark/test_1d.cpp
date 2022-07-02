@@ -2,10 +2,13 @@
 #include <cstring>
 #include <cmath>
 #include <sys/time.h>
-#include "../include/mcfft_api.h"
+#include "../include/mcfft_1d_utils.h"
 #include "rocfft.h"
 #include "../vkFFT/vkFFT.h"
 #include "../include/utils_VkFFT.h"
+
+#define T_MIN 4
+#define MAX_TIMES (1 << 30)
 
 extern char* optarg;
 extern int optopt;
@@ -25,11 +28,11 @@ void double2float(double * data, float *res, int n){
 
 void rocfft_get_result(float *data, float *result, int n, int n_batch){
     const size_t length = n;
-    bool inplace = false;
+    bool inplace = true;
     float* x = NULL;
     hipMalloc(&x, n * 2 * sizeof(float) * n_batch);
     float* y = NULL;
-    hipMalloc(&y, n * 2 * sizeof(float) * n_batch);
+    //hipMalloc(&y, n * 2 * sizeof(float) * n_batch);
 
     hipMemcpy(x, data, n * n_batch * 2 * sizeof(float), hipMemcpyHostToDevice);
 
@@ -63,25 +66,32 @@ void rocfft_get_result(float *data, float *result, int n, int n_batch){
         assert(status == rocfft_status_success);
     }
 
-    double t1;
-    t1 = gettime();
-    int iter = 8192;
-    // Execute the forward transform
-    for(int i = 0; i < iter; i++){
-        status = rocfft_execute(forward,
-                            (void**)&x, // in_buffer
-                            (void**)&y, // out_buffer
-                            forwardinfo); // execution info
-	    
-    }
-    hipDeviceSynchronize();
-    double runtime = gettime() - t1;
+    int iter;
+    double runtime;
+    for (int i = 1; i <= MAX_TIMES; i <<= 1)
+    {
+        double t1;
+        iter = i;
+        t1 = gettime();
 
-    printf("rocfft time cost: %e\n", runtime / iter);
+        for(int i = 0; i < iter; i++){
+            status = rocfft_execute(forward,
+                                (void**)&x, // in_buffer
+                                (void**)&y, // out_buffer
+                                forwardinfo); // execution info
+        }
+        hipDeviceSynchronize();
+        runtime = gettime() - t1;
+        if (runtime > T_MIN) break;
+    }
+
+
+    double tflops = 12.0 * n * std::log(n) * 1e-12 / std::log(2.0) * n_batch * iter / runtime;
+    printf("@rocfft > n: %d, n_batch: %d, iter: %d, time per iter: %e, tflops: %lf \n", n, n_batch, iter, runtime / iter, tflops);
 
     assert(status == rocfft_status_success);
 
-    hipMemcpy(result, y, n * n_batch * 2 * sizeof(float), hipMemcpyDeviceToHost);
+    hipMemcpy(result, x, n * n_batch * 2 * sizeof(float), hipMemcpyDeviceToHost);
 
     // printf("~~~~~~~~~~~~rocfft~~~~~~~~~~~~\n");
     // for(int i = 0; i < 256*256; i++){
@@ -134,12 +144,21 @@ void vkfft_get_result(float *data, float *result, int n, int n_batch){
 
 	//hipMemcpy(tmpbuffer, buffer_input, bufferSize, hipMemcpyHostToDevice);
 
-    int iter = 8192;
-    double t1;
-    t1 = gettime();
-    performVulkanFFT(&vkGPU, &app, &launchParams, -1, iter);
-    double runtime = gettime() - t1;
-    printf("vkfft time cost: %e\n", runtime / iter);
+    int iter;
+    double runtime;
+    for (int i = 1; i <= MAX_TIMES; i <<= 1)
+    {
+        double t1;
+        iter = i;
+        t1 = gettime();
+        performVulkanFFT(&vkGPU, &app, &launchParams, -1, iter);
+        hipDeviceSynchronize();
+        runtime = gettime() - t1;
+        if (runtime > T_MIN) break;
+    }
+
+    double tflops = 12.0 * n * std::log(n) * 1e-12 / std::log(2.0) * n_batch * iter / runtime;
+    printf("@vkfft > n: %d, n_batch: %d, iter: %d, time per iter: %e, tflops: %lf \n", n, n_batch, iter, runtime / iter, tflops);
     hipMemcpy(result, buffer, inputBufferSize, hipMemcpyDeviceToHost);
 
     // printf("~~~~~~~~~~~vkfft~~~~~~~~~~~~~\n");
@@ -151,14 +170,31 @@ void vkfft_get_result(float *data, float *result, int n, int n_batch){
     
 }
 
+void mcfft_get_result(double *data, double *result, int n, int n_batch){
+    double runtime;
+    int iter;
+    setup(data, n, n_batch);
+    for (int i = 1; i <= MAX_TIMES; i <<= 1)
+    {
+        double t1;
+        t1 = gettime();
+        doit(i);
+        runtime = gettime() - t1;
+        iter = i;
+        if (runtime > T_MIN) break;
+    }
+    finalize(result);
+    double tflops = 12.0 * n * std::log(n) * 1e-12 / std::log(2.0) * n_batch * iter / runtime;
+    printf("@mcfft > n: %d, n_batch: %d, iter: %d, time per iter: %e, tflops: %lf \n", n, n_batch, iter, runtime / iter, tflops);
+}
+
 
 
 int main(int argc, char* argv[])
 {
-    int n = 65536, n_batch = 1, max_times = 1 << 30;
-    double t_min = 4;
+    int n = 65536, n_batch = 1;
     char opt_c = 0;
-    while (EOF != (opt_c = getopt(argc, argv, "n:b:m:")))
+    while (EOF != (opt_c = getopt(argc, argv, "n:b:")))
     {
         switch (opt_c)
         {
@@ -167,9 +203,6 @@ int main(int argc, char* argv[])
             break;
         case 'b':
             n_batch = atoi(optarg);
-            break;
-        case 'm':
-            max_times = atoi(optarg);
             break;
         case '?':
             printf("unkown option %c\n", optopt);
@@ -183,39 +216,22 @@ int main(int argc, char* argv[])
     //hipDeviceGetAttribute(&value, hipDeviceAttributeMaxSharedMemoryPerBlock, (hipDevice_t)0);
     //hipDeviceGetAttribute(&value, hipDeviceAttributeMaxThreadsPerBlock, (hipDevice_t)0);
     // hipDeviceGetAttribute(&value, hipDeviceAttributeWarpSize, (hipDevice_t)0);
-    // printf("~~~~~~~~~~~~%d~~~~~~~~~~~\n", value);
+    //printf("~~~~~~~~~~~~%d~~~~~~~~~~~\n", value);
 
     double* data = (double*)malloc(sizeof(double) * n * n_batch * 2);
     generate_data(data, n, n_batch);
     
-    float* rocfft_res = (float*)malloc(sizeof(float) * n * n_batch * 2);
-    float* rocfft_in = (float*)malloc(sizeof(float) * n * n_batch * 2);
-    double2float(data, rocfft_in, n * n_batch * 2);
-    vkfft_get_result(rocfft_in, rocfft_res, n, n_batch);
+    float* out = (float*)malloc(sizeof(float) * n * n_batch * 2);
+    float* in = (float*)malloc(sizeof(float) * n * n_batch * 2);
 
-    
-    rocfft_get_result(rocfft_in, rocfft_res, n, n_batch);
+    double2float(data, in, n * n_batch * 2);
 
-    double* result = (double*)malloc(sizeof(double) * n * n_batch * 2);
+    vkfft_get_result(in, out, n, n_batch);
+  
+    rocfft_get_result(in, out, n, n_batch);
 
-    double run_time;
-    int iter;
-    setup(data, n, n_batch);
-    for (int i = 1; i <= max_times; i <<= 1)
-    {
-        double t1;
-        t1 = gettime();
-        doit(i);
-        run_time = gettime() - t1;
-        iter = i;
-        if (run_time > t_min)
-            break;
-        // printf("%d\n", iter);
-    }
-    finalize(result);
-
-    double tflops = 12.0 * n * std::log(n) * 1e-12 / std::log(2.0) * n_batch * iter / run_time;
-    printf("n: %d, n_batch: %d, iter: %d, time per iter: %e, tflops: %lf \n", n, n_batch, iter, run_time / iter, tflops);
+    double* res = (double*)malloc(sizeof(double) * n * n_batch * 2);
+    mcfft_get_result(data, res, n, n_batch);   
 
     return 0;
 }

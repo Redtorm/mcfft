@@ -1,8 +1,6 @@
 INC_DIR=-I./include -I/usr/include -I./vkFFT
 BIN_DIR=./bin
-SRC_DIR=./source
 LIB_DIR=-L/usr/lib/x86_64-linux-gnu/
-EXC_DIR=./start
 
 .PHONY : all test clean a b c d
 
@@ -17,24 +15,35 @@ ROCFFT_LIB=/home/lulu/zsx-home/software/rocm-4.5.0/rocfft/lib
 INC_DIR+=-I${WMMA_INC} -I${ROC_INC} -I${ROCFFT_INC}
 LIB_DIR+=-L${WMMA_LIB} -L${ROC_LIB} -L${ROCFFT_LIB}
 
-SRC=${wildcard ${SRC_DIR}/*.cpp}
-EXC_SRC=${wildcard ${EXC_DIR}/*.cpp}
-EXC=$(patsubst %.cpp, %, ${notdir ${wildcard ${EXC_DIR}/*.cpp}})
+SRC_1D_T=./source/mcfft_1d_device.cpp ./source/mcfft_1d_utils.cpp ./source/vkfft_utils.cpp ./benchmark/test_1d.cpp
+SRC_1D_A=./source/mcfft_1d_device.cpp ./source/mcfft_1d_utils.cpp ./source/vkfft_utils.cpp ./benchmark/accuracy_1d.cpp
 
+SRC_2D_T=./source/mcfft_2d_device.cpp ./source/mcfft_2d_utils.cpp ./source/vkfft_utils.cpp ./benchmark/test_2d.cpp
+SRC_2D_A=./source/mcfft_2d_device.cpp ./source/mcfft_2d_utils.cpp ./source/vkfft_utils.cpp ./benchmark/accuracy_2d.cpp
 
-BIN_TARGETS+=$(foreach n,$(EXC),${BIN_DIR}/$(n))
-all:${BIN_TARGETS}
+BIN_TARGETS=./bin/test_1d ./bin/accuracy_1d ./bin/test_2d ./bin/accuracy_2d
+
+ALL:${BIN_TARGETS}
 
 CC=/opt/rocm-4.5.2/bin/hipcc
 CFLAGS= -g -w -std=c++14 
 LIB_USE= -lfftw3 -lrocfft
 
-
-${BIN_TARGETS}:${SRC} ${EXC_SRC}
+./bin/test_1d:${SRC_1D_T}
 	$(call Mkdir, ${BIN_DIR})
-	${CC} ${CFLAGS} ${INC_DIR} ${LIB_DIR} ${LIB_USE} ${SRC} ${EXC_DIR}/$(notdir $@).cpp  -o $@
+	${CC} ${CFLAGS} ${INC_DIR} ${LIB_DIR} ${LIB_USE} ${SRC_1D_T} -o $@
 
+./bin/accuracy_1d:${SRC_1D_A}
+	$(call Mkdir, ${BIN_DIR})
+	${CC} ${CFLAGS} ${INC_DIR} ${LIB_DIR} ${LIB_USE} ${SRC_1D_A} -o $@
 
+./bin/test_2d:${SRC_2D_T}
+	$(call Mkdir, ${BIN_DIR})
+	${CC} ${CFLAGS} ${INC_DIR} ${LIB_DIR} ${LIB_USE} ${SRC_2D_T} -o $@
+
+./bin/accuracy_2d:${SRC_2D_A}
+	$(call Mkdir, ${BIN_DIR})
+	${CC} ${CFLAGS} ${INC_DIR} ${LIB_DIR} ${LIB_USE} ${SRC_2D_A} -o $@
 
 define Mkdir
 	$(shell if [ ! -d $(1) ]; then mkdir $(1); fi)

@@ -1,6 +1,6 @@
-#include "../include/mcfft_api.h"
+#include "../include/mcfft_2d_device.h"
 
-int* rev, N, N_batch;
+int *rev_x, *rev_y, Nx, Ny, N_batch;
 float *in_host;
 float *in_device;
 mcfftHandle plan;
@@ -30,50 +30,47 @@ void gen_rev(int N, int rev[], int radices[], int n_radices)
         rev[i] = tmp_0[i];
 }
 
-void setup(double* data, int n, int n_batch)
+void setup(double* data, int nx, int ny, int n_batch)
 {
-    N = n;
+    Nx = nx;
+    Ny = ny;
     N_batch = n_batch;
-    mcfftCreate(&plan, N, N_batch);
+    mcfftCreate(&plan, Nx, Ny, N_batch);
     // in_host
-    rev = (int*)malloc(sizeof(int) * N);
-    gen_rev(N, rev, plan.radices, plan.n_radices);
-    in_host = (float*)malloc(sizeof(float) *  N * N_batch * 2);
+    rev_x = (int *)malloc(sizeof(int) * Nx);
+    rev_y = (int *)malloc(sizeof(int) * Ny);
+    gen_rev(Nx, rev_x, plan.radices_x, plan.n_radices_x);
+    gen_rev(Ny, rev_y, plan.radices_y, plan.n_radices_y);
+    in_host = (float *)malloc(sizeof(float) * 2 * Nx * Ny * N_batch);
 #pragma omp parallel for
-    for (int j = 0; j < N_batch; ++j){
-        for (int i = 0; i < N; ++i)
-        {
-            in_host[2 * N * j + 2 * i + 0] = data[2 * N * j + 2 * rev[i] + 0];
-            in_host[2 * N * j + 2 * i + 1] = data[2 * N * j + 2 * rev[i] + 1];
-            
-        }
-        // for (int i = 0; i < N; ++i)
-        // {
-        //     if(j ==0)
-        //     printf("host%0.0f...%0.0f\n" ,__half2float(in_host[2 * N * j + 2 * i + 0]), __half2float(in_host[2 * N * j + 2 * i + 1]));  
-        // }
+    for (int i = 0; i < N_batch; ++i){
+        for (int j = 0; j < Nx; ++j){
+            for (int k = 0; k < Ny; ++k){
+                in_host[2 * (i * Nx * Ny + j * Ny + k) + 0] = data[2 * (i * Nx * Ny + rev_x[j] * Ny + rev_y[k]) + 0];
+                in_host[2 * (i * Nx * Ny + j * Ny + k) + 1] = data[2 * (i * Nx * Ny + rev_x[j] * Ny + rev_y[k]) + 1];
+            }
+        }    
     }
+        
         
         
     //printf("%f...%f\n" , data[55], data[33]);
     //printf("host%f...%f\n" , in_host[55], in_host[33]);
-    hipMalloc(&in_device, sizeof(float) * N * N_batch * 2);
-    hipMemcpy(in_device, in_host, sizeof(float) * N * N_batch * 2, hipMemcpyHostToDevice);
+    hipMalloc(&in_device, sizeof(float) * Nx * Ny * N_batch * 2);
+    hipMemcpy(in_device, in_host, sizeof(float) * Nx * Ny * N_batch * 2, hipMemcpyHostToDevice);
 }
 
- void finalize(double* result){
-   hipMemcpy(in_host, in_device, sizeof(float) * N * N_batch * 2, hipMemcpyDeviceToHost);
+void finalize(double* result){
+   hipMemcpy(in_host, in_device, sizeof(float) * Nx * Ny * N_batch * 2, hipMemcpyDeviceToHost);
 #pragma omp paralllel for
-    for (int j = 0; j < N_batch; ++j)
-        for (int i = 0; i < N; ++i)
-        {
-            result[0 + i * 2 + 2 * N * j] = (double)in_host[2 * j * N + 2 * i + 0];
-            result[1 + i * 2 + 2 * N * j] = (double)in_host[2 * j * N + 2 * i + 1];
-            //printf("3424host>>>>>>>>> %e...\n" ,__half2float(in_host_imag[j * N + i]));
-            //printf("host%e...\n" ,result[0 + i * 2 + 2 * N * j]);
-        }
- }
+    for (int i = 0; i < N_batch * Nx * Ny; ++i){
+        
+        result[2 * i + 0] = (double)in_host[2 * i + 0];
+        result[2 * i + 1] = (double)in_host[2 * i + 1];
+        //printf("3424host>>>>>>>>> %e...\n" ,__half2float(in_host_imag[j * N + i]));
 
+    }
+}
 void doit(int iter)
 {
     for (int t = 0; t < iter; ++t)

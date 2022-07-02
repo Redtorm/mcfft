@@ -1,5 +1,5 @@
 #define __HIP_PLATFORM_HCC__
-#include "../include/mcfft_half.h"
+#include "../include/mcfft_2d_device.h"
 
 using namespace rocwmma;
 
@@ -306,7 +306,7 @@ __global__ void layer_1024_0(float2* data, float* F_real, float* F_imag)
     float2 twiddle_1024_2 = cmul(twiddle_1024_1, twiddle_1024_1);
     float2 twiddle_1024_3 = cmul(twiddle_1024_2, twiddle_1024_1);
 
-    for(int i = 0; i < 1024 * CONT_SIZE; i += NUM_WARP * 64 * 2){
+    for(int i = 0; i < 1024 * CONT_SIZE; i += NUM_WARP * 64 * 4){
         int t = tid_block / 256;
         int eid_block = i + (1024 - 256) * t + tid_block;
         float2 ele_0 = smem[eid_block];
@@ -350,8 +350,8 @@ __global__ void layer_256_1(int step, float2* data, float* F_real, float* F_imag
         int raw_col = threadIdx.x % 16;
         int raw_row = threadIdx.x / 16 * 4;
         int golbal_col = blockIdx.x * CONT_SIZE + threadIdx.y % chunk_num * 16 + raw_col;
-        float2 twiddle_unit = W_N_K(step * 16, golbal_col, raw_row);
-        float2 twiddle_factor = W_N_K(step * 16, golbal_col, 1);
+        //float2 twiddle_unit = W_N_K(step * 16, golbal_col, raw_row);
+        //float2 twiddle_factor = W_N_K(step * 16, golbal_col, 1);
 
         //warp start position in block
         int warp_start = i + threadIdx.y / chunk_num * chunk_num * 256 + threadIdx.y % chunk_num * 16;
@@ -367,12 +367,12 @@ __global__ void layer_256_1(int step, float2* data, float* F_real, float* F_imag
 
             float2 in_ele = data[eid_global];
 
-            in_ele = cmul(in_ele, twiddle_unit);
+            //in_ele = cmul(in_ele, twiddle_unit);
 
             frag_in_real.x[j] = in_ele.x;
             frag_in_imag.x[j] = in_ele.y;
 
-            twiddle_unit = cmul(twiddle_unit, twiddle_factor);
+            //twiddle_unit = cmul(twiddle_unit, twiddle_factor);
         }
 
         complex_mul(frag_F_real, frag_F_imag, frag_in_real, frag_in_imag, frag_out_real, frag_out_imag);
@@ -402,9 +402,9 @@ __global__ void layer_256_1(int step, float2* data, float* F_real, float* F_imag
         int warp_start = i * NUM_WARP * 16 + threadIdx.y * 16;
 
         //each block hold the same data as above, but the way of looking data has changed
-        int golbal_col = blockIdx.x * CONT_SIZE + i * step * (16 * NUM_WARP / CONT_SIZE) + threadIdx.y / chunk_num * step + threadIdx.y % chunk_num * 16 + raw_col;
-        float2 twiddle_unit = W_N_K(step * 256, golbal_col, raw_row);
-        float2 twiddle_factor = W_N_K(step * 256, golbal_col, 1);
+        int golbal_col = i * 8 + threadIdx.y / 2;
+        float2 twiddle_unit = W_N_K(256, golbal_col, raw_row);
+        float2 twiddle_factor = W_N_K(256, golbal_col, 1);
         for (int j = 0; j < 4; ++j){
             int col = raw_col;
             int row = raw_row + j;
@@ -450,16 +450,141 @@ __global__ void layer_256_1(int step, float2* data, float* F_real, float* F_imag
     }
 }
 
+template <int CONT_SIZE, int NUM_WARP>
+__global__ void layer_512_1(int step, float2* data, float* F_real, float* F_imag){
+
+    extern __shared__ float2 smem[];
+
+    int tid_block = threadIdx.x + threadIdx.y * blockDim.x;
+    int block_start = blockIdx.y * step * 512 + blockIdx.x * CONT_SIZE;
+
+    //chunk num per cont
+    int chunk_num = CONT_SIZE / 16;
+
+    rocwmma::fragment<rocwmma::matrix_a, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::row_major> frag_F_real;
+    rocwmma::fragment<rocwmma::matrix_a, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::row_major> frag_F_imag;
+    rocwmma::load_matrix_sync(frag_F_real, F_real, 16);
+    rocwmma::load_matrix_sync(frag_F_imag, F_imag, 16);
+
+    for (int i = 0; i < 512 * CONT_SIZE; i += NUM_WARP * 256){
+        rocwmma::fragment<rocwmma::accumulator, rocwmma_M, rocwmma_N, rocwmma_K, float> frag_out_real;
+        rocwmma::fragment<rocwmma::accumulator, rocwmma_M, rocwmma_N, rocwmma_K, float> frag_out_imag;
+        rocwmma::fragment<rocwmma::matrix_b, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::col_major> frag_in_real;
+        rocwmma::fragment<rocwmma::matrix_b, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::col_major> frag_in_imag;
+
+        int raw_col = threadIdx.x % 16;
+        int raw_row = threadIdx.x / 16 * 4;
+        //int golbal_col = blockIdx.x * CONT_SIZE + threadIdx.y % chunk_num * 16 + raw_col;
+        //float2 twiddle_unit = W_N_K(step * 16, golbal_col, raw_row);
+        //float2 twiddle_factor = W_N_K(step * 16, golbal_col, 1);
+
+        //warp start position in block
+        int warp_start = i + threadIdx.y / chunk_num * chunk_num * 256 + threadIdx.y % chunk_num * 16;
+
+        for (int j = 0; j < 4; ++j){
+            int col = raw_col;
+            int row = raw_row + j;
+            //element position in block
+            int eid_block = warp_start + row * CONT_SIZE + col;
+
+            //element position in golbal memory
+            int eid_global = block_start + eid_block / CONT_SIZE * step + eid_block % CONT_SIZE;
+
+            float2 in_ele = data[eid_global];
+
+            //in_ele = cmul(in_ele, twiddle_unit);
+
+            frag_in_real.x[j] = in_ele.x;
+            frag_in_imag.x[j] = in_ele.y;
+
+            //twiddle_unit = cmul(twiddle_unit, twiddle_factor);
+        }
+
+        complex_mul(frag_F_real, frag_F_imag, frag_in_real, frag_in_imag, frag_out_real, frag_out_imag);
+
+        for (int j = 0; j < 4; ++j){
+            int col = raw_col;
+            int row = raw_row + j;
+            //element position in block
+            int eid_block = warp_start + row * CONT_SIZE + col;
+
+            smem[eid_block] = {frag_out_real.x[j], frag_out_imag.x[j]};
+        }
+
+
+    }
+
+    __syncthreads();
+
+    for (int i = 0; i < 512 * CONT_SIZE / NUM_WARP / 256; i++){
+        rocwmma::fragment<rocwmma::accumulator, rocwmma_M, rocwmma_N, rocwmma_K, float> frag_out_real;
+        rocwmma::fragment<rocwmma::accumulator, rocwmma_M, rocwmma_N, rocwmma_K, float> frag_out_imag;
+        rocwmma::fragment<rocwmma::matrix_b, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::col_major> frag_in_real;
+        rocwmma::fragment<rocwmma::matrix_b, rocwmma_M, rocwmma_N, rocwmma_K, float, rocwmma::col_major> frag_in_imag;
+
+        int raw_col = threadIdx.x % 16;
+        int raw_row = threadIdx.x / 16 * 4;
+        int warp_start = i * NUM_WARP * 16 + i * 256 * CONT_SIZE + threadIdx.y * 16;
+
+        //each block hold the same data as above, but the way of looking data has changed
+        int golbal_col = i * 8 + threadIdx.y / 2;
+        float2 twiddle_unit = W_N_K(256, golbal_col, raw_row);
+        float2 twiddle_factor = W_N_K(256, golbal_col, 1);
+        for (int j = 0; j < 4; ++j){
+            int col = raw_col;
+            int row = raw_row + j;
+            int row_length = CONT_SIZE * 16; 
+            int eid_block = warp_start + row * row_length + col;
+
+            float2 in_ele = smem[eid_block];
+
+           // float aa = in_ele.x;
+
+            in_ele = cmul(in_ele, twiddle_unit);
+
+            // float bb = in_ele.x;
+            // printf("after:%e after:%e\n", aa, bb);
+
+            frag_in_real.x[j] = in_ele.x;
+            frag_in_imag.x[j] = in_ele.y;
+            
+            twiddle_unit = cmul(twiddle_unit, twiddle_factor);
+        }
+
+        complex_mul(frag_F_real, frag_F_imag, frag_in_real, frag_in_imag, frag_out_real, frag_out_imag);
+
+        for (int j = 0; j < 4; ++j){
+            int col = raw_col;
+            int row = raw_row + j;
+            int row_length = CONT_SIZE * 16;
+            int eid_block = warp_start + row * row_length + col;
+            smem[eid_block] = {frag_out_real.x[j], frag_out_imag.x[j]};
+        }
+    }
+    __syncthreads();
+
+    // half2 twiddle_unit_2 = W_N_K(step * 512, 256 / CONT_SIZE * step);
+    float2 twiddle_unit = W_N_K(step * 512, 256 / CONT_SIZE * step, 1); // precision improved
+    // half2 twiddle_factor = W_N_K(step * 512, blockIdx.x * CONT_SIZE + t_block / CONT_SIZE * step + t_block % CONT_SIZE);
+    float2 twiddle_factor = W_N_K(step * 512, blockIdx.x * CONT_SIZE + tid_block / CONT_SIZE * step + tid_block % CONT_SIZE, 1); 
+    for (int i = 0; i < 256 * CONT_SIZE; i += NUM_WARP * 64)
+    {
+        int eid_block = i + tid_block;
+        float2 ele_0 = smem[eid_block];
+        // half2 ele_1 = cmul(smem_in[eid + 256 * CONT_SIZE], twiddle_factor);
+        float2 ele_1 = cmul(smem[eid_block + 256 * CONT_SIZE], twiddle_factor); // precision improved
+        data[block_start + eid_block / CONT_SIZE * step + eid_block % CONT_SIZE] = cadd(ele_0, ele_1);
+        eid_block += 256 * CONT_SIZE;
+        data[block_start + eid_block / CONT_SIZE * step + eid_block % CONT_SIZE] = csub(ele_0, ele_1);
+        // twiddle_factor = cmul(twiddle_factor, twiddle_unit_2);
+        twiddle_factor = cmul(twiddle_factor, twiddle_unit); // precision improved
+    }
+}
+
 void mcfftExec(mcfftHandle plan, float* data)
 {
 
-    // for(int i = 0; i < 256; i++){
-    //     // if(threadIdx.x == 0 && threadIdx.y == 0){
-    //          printf("%f~~~~~~%f\n", data[2*i], data[2*i+1]);
-    //     // }
-    // }
-
-    const uint32_t num_warp = 8;
+    const uint32_t num_warp = 16;
     const uint32_t n_cont[3] = { 32, 16, 8 };
 
     uint32_t step = 1;
@@ -467,79 +592,33 @@ void mcfftExec(mcfftHandle plan, float* data)
     uint32_t smem_size;
     dim3 threads, blocks;
 
-    //printfindevice<<<1,1>>>(data);
-
-    // V100
-    switch (plan.mergings[0])
-    {
-    case 0:
-        RADIX = 256;
-        break;
-
-    case 1:
-        RADIX = 512;
-        break;
-
-    case 2:
-        RADIX = 1024;
-        break;
-
-    default:
-        break;
-    }
-    threads = { 64, num_warp };
-    blocks = { plan.N * plan.N_batch / n_cont[plan.mergings[0]] / RADIX };
-    smem_size = RADIX * 2 * sizeof(float) * n_cont[plan.mergings[0]];
-
+    RADIX = plan.Ny;
+    threads = {64, num_warp};
+    smem_size = RADIX * sizeof(float2) * n_cont[plan.mergings[0]];
+    blocks = { plan.Nx * plan.Ny * plan.N_batch / n_cont[plan.mergings[0]] / RADIX };
     hipFuncSetAttribute((void*)plan.layer_0[plan.mergings[0]], 
                         hipFuncAttributeMaxDynamicSharedMemorySize, 
                         smem_size);
-
-    plan.layer_0[plan.mergings[0]]<<<blocks, threads, smem_size>>>((float2*)data, 
-                                                                   plan.F_real, 
-                                                                   plan.F_imag);
+    plan.layer_0[plan.mergings[0]]<<<blocks, threads, smem_size>>>((float2 *)data, plan.F_real, plan.F_imag);
     step *= RADIX;
 
-    for (int i = 1; i < plan.n_mergings; ++i)
-    {
-        switch (plan.mergings[i])
-        {
-        case 0:
-            RADIX = 256;
-            break;
-
-        case 1:
-            RADIX = 512;
-            break;
-
-        case 2:
-            RADIX = 1024;
-            break;
-
-        default:
-            break;
-        }
-
-        blocks = { step / n_cont[plan.mergings[i]], plan.N_batch * plan.N / step / RADIX };
-        hipFuncSetAttribute((void*)plan.layer_1[plan.mergings[i]], 
-                            hipFuncAttributeMaxDynamicSharedMemorySize, 
-                            RADIX * sizeof(float) * 2 * n_cont[plan.mergings[i]]);
-
-
-        plan.layer_1[plan.mergings[i]]<<<blocks, threads, smem_size>>>(step, 
-                                                                       (float2*)data, 
-                                                                       plan.F_real, 
-                                                                       plan.F_imag);
-        step *= RADIX;
-    }
+    RADIX = plan.Nx;
+    smem_size = RADIX * sizeof(float2) * n_cont[plan.mergings[1]];
+    blocks = {step / n_cont[plan.mergings[1]], plan.N_batch * plan.Nx * plan.Ny / step / RADIX};
+    hipFuncSetAttribute((void*)plan.layer_1[plan.mergings[1]], 
+                         hipFuncAttributeMaxDynamicSharedMemorySize, 
+                         smem_size);
+    plan.layer_1[plan.mergings[1]]<<<blocks, threads, smem_size>>>(step, (float2 *)data, plan.F_real, plan.F_imag);
+    step *= RADIX;
 }
 
-void mcfftCreate(mcfftHandle* plan, int n, int n_batch)
+void mcfftCreate(mcfftHandle* plan, int nx, int ny, int n_batch)
 {
-    plan->N = n;
+    plan->Nx = nx;
+    plan->Ny = ny;
     plan->N_batch = n_batch;
     // setup functions
-    const int num_warp = 8;
+    const int num_warp = 16;
     const int n_cont_256 = 32;
     const int n_cont_512 = 16;
     const int n_cont_1024 = 8;
@@ -547,92 +626,51 @@ void mcfftCreate(mcfftHandle* plan, int n, int n_batch)
     plan->layer_0[1] = layer_512_0<n_cont_512, num_warp>;
     plan->layer_0[2] = layer_1024_0<n_cont_1024, num_warp>;
     plan->layer_1[0] = layer_256_1<n_cont_256, num_warp>;
-    //plan->layer_1[1] = layer_512_1<n_cont_512, num_warp>;
+    plan->layer_1[1] = layer_512_1<n_cont_512, num_warp>;
     // radices
-    switch (n)
+    switch (nx)
     {
     case 256:
-        plan->n_radices = 2;
-        plan->n_mergings = 1;
+        plan->n_radices_x = 2;
         break;
 
     case 512:
-        plan->n_radices = 3;
-        plan->radices[2] = 2;
-        plan->n_mergings = 1;
+        plan->n_radices_x = 3;
+        plan->mergings[1] = 1;
+        break;
+
+    case 1024:
+        plan->n_radices_x = 3;
+        plan->radices_x[2] = 4;
+        plan->mergings[1] = 2;
+        break;
+
+    default:
+        break;
+    }
+    switch (ny)
+    {
+    case 256:
+        plan->n_radices_y = 2;
+        break;
+
+    case 512:
+        plan->n_radices_y = 3;
         plan->mergings[0] = 1;
         break;
 
     case 1024:
-        plan->n_radices = 3;
-        plan->radices[2] = 4;
-        plan->n_mergings = 1;
+        plan->n_radices_y = 3;
+        plan->radices_y[2] = 4;
         plan->mergings[0] = 2;
-        break;
-
-    case 131072:
-        plan->n_radices = 5;
-        plan->radices[2] = 2;
-        plan->n_mergings = 2;
-        plan->mergings[0] = 1;
-        break;
-
-    case 262144:
-        plan->n_radices = 6;
-        plan->radices[2] = 2;
-        plan->radices[5] = 2;
-        plan->n_mergings = 2;
-        plan->mergings[0] = 1;
-        plan->mergings[1] = 1;
-        break;
-
-    case 524288:
-        plan->n_radices = 6;
-        plan->radices[2] = 4;
-        plan->radices[5] = 2;
-        plan->n_mergings = 2;
-        plan->mergings[0] = 2;
-        plan->mergings[1] = 1;
-        break;
-
-    case 16777216:
-        plan->n_radices = 6;
-        plan->n_mergings = 3;
-        break;
-
-    case 33554432:
-        plan->n_radices = 7;
-        plan->radices[2] = 2;
-        plan->n_mergings = 3;
-        plan->mergings[0] = 1;
-        break;
-
-    case 67108864:
-        plan->n_radices = 8;
-        plan->radices[2] = 2;
-        plan->radices[5] = 2;
-        plan->n_mergings = 3;
-        plan->mergings[0] = 1;
-        plan->mergings[1] = 1;
-        break;
-
-    case 134217728:
-        plan->n_radices = 9;
-        plan->radices[2] = 2;
-        plan->radices[5] = 2;
-        plan->radices[8] = 2;
-        plan->n_mergings = 3;
-        plan->mergings[0] = 1;
-        plan->mergings[1] = 1;
-        plan->mergings[2] = 1;
         break;
 
     default:
         break;
     }
     // F
-    plan->F_real_tmp = (float*)malloc(sizeof(float) * 256);
-    plan->F_imag_tmp = (float*)malloc(sizeof(float) * 256);
+    plan->F_real_tmp = (float *)malloc(sizeof(float) * 256);
+    plan->F_imag_tmp = (float *)malloc(sizeof(float) * 256);
 #pragma omp parallel for
     for (int i = 0; i < 16; ++i)
         for (int j = 0; j < 16; ++j)

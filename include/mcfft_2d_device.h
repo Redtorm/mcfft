@@ -1,5 +1,5 @@
-#ifndef __MCFFT_HALF_H__
-#define __MCFFT_HALF_H__
+#ifndef __MCFFT_2D_DEVICE_H__
+#define __MCFFT_2D_DEVICE_H__
 
 #define __HIP_PLATFORM_HCC__
 
@@ -12,11 +12,11 @@
 
 typedef struct 
 {
-    int N, N_batch;
-    int radices[9] = { 16, 16, 16, 16, 16, 16, 16, 16, 16 };
-    int n_radices;
-    int mergings[3] = { 0, 0, 0 };
-    int n_mergings;
+    int Nx, Ny, N_batch;
+    int radices_x[3] = {16, 16, 2};
+    int radices_y[3] = {16, 16, 2};
+    int n_radices_x, n_radices_y;
+    int mergings[2] = {0, 0};
     void (*layer_0[3])(float2*, float*, float*);
     void (*layer_1[3])(int, float2*, float*, float*);
     float* F_real, * F_imag;
@@ -30,6 +30,6 @@ typedef struct
 // } FloatComplex;
 
 void mcfftExec(mcfftHandle plan, float* data);
-void mcfftCreate(mcfftHandle* plan, int n, int n_batch);
+void mcfftCreate(mcfftHandle* plan, int nx, int ny, int n_batch);
 
 #endif

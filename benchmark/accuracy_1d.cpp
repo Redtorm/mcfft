@@ -4,7 +4,7 @@
 #include <cstring>
 #include <cmath>
 #include <algorithm>
-#include "../include/mcfft_api.h"
+#include "../include/mcfft_1d_utils.h"
 
 extern char *optarg;
 extern int optopt;
@@ -45,7 +45,7 @@ double get_error(double *tested, double *standard, int n, int n_batch)
             // }
         }
     for (int i = 0; i < 131072; ++i){
-       // printf("%e ... %e\n" , tested[i], standard[i]);
+       printf("%e ... %e\n" , tested[i], standard[i]);
         // if(std::abs((tested[i]-standard[i]))>1){
         //     printf("%f...\n" , tested[i]-standard[i]);
         // }

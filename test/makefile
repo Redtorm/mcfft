@@ -8,11 +8,14 @@ OoO=%i
 #伪目标
 .PHONY : test clean debug
 
-WMMA_INC=/home/lulu/zsx-home/software/rocWMMA/include
+
+WMMA_INC=/global/home/lulu/zsx_home/zsx-home/software/rocWMMA/include
+#WMMA_INC=/home/lulu/zsx-home/software/rocWMMA/include
 ROC_INC=/opt/rocm-4.5.0/hip/include
 
 ROC_LIB=/opt/rocm-4.5.0/lib
-WMMA_LIB=/home/lulu/zsx-home/software/rocWMMA/lib
+#WMMA_LIB=/home/lulu/zsx-home/software/rocWMMA/lib
+WMMA_LIB=/global/home/lulu/zsx_home/zsx-home/software/rocWMMA/lib
 
 INC_DIR+=-I${WMMA_INC} -I${ROC_INC}
 LIB_DIR+=-L${WMMA_LIB} -L${ROC_LIB}

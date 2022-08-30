@@ -3,11 +3,11 @@ make all --print-data-base --no-builtin-variables --no-builtin-rules --question
 # Built for x86_64-pc-linux-gnu
 # Copyright (C) 1988-2014 Free Software Foundation, Inc.
 # License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+ 
 # This is free software: you are free to change and redistribute it.
 # There is NO WARRANTY, to the extent permitted by law.
- 
 
-# Make data base, printed on Sat Jul  2 07:39:32 2022
+# Make data base, printed on Sat Jul 16 05:01:17 2022
 
 # Variables
 
@@ -19,8 +19,6 @@ make all --print-data-base --no-builtin-variables --no-builtin-rules --question
 .SHELLFLAGS := -c
 # environment
 VSCODE_AGENT_FOLDER = /home/lulu/.vscode-server
-# environment
-VSCODE_LOG_NATIVE = false
 # automatic
 ?D = $(patsubst %/,%,$(dir $?))
 # automatic
@@ -30,13 +28,14 @@ VSCODE_LOG_NATIVE = false
 # default
 MAKE_VERSION := 4.1
 # makefile
+ 
 CURDIR := /home/lulu/zsx-home/his-deve/mcfft-float
 # makefile
 SHELL = /bin/sh
 # environment
 VSCODE_NLS_CONFIG = {"locale":"en","availableLanguages":{}}
 # environment
-_ = /home/lulu/.vscode-server/bin/30d9c6cd9483b2cc586687151bcbcd635f373630/node
+_ = /home/lulu/.vscode-server/bin/92d25e35d9bf1a6b16f7d0758f25d48ace11e5b9/node
 # makefile (from 'makefile', line 29)
 CFLAGS = -g -w -std=c++14 
 # makefile (from 'makefile', line 1)
@@ -47,8 +46,6 @@ LIB_DIR = -L/usr/lib/x86_64-linux-gnu/ -L${WMMA_LIB} -L${ROC_LIB} -L${ROCFFT_LIB
 GNUMAKEFLAGS := 
 # makefile (from 'makefile', line 19)
 SRC_1D_A = ./source/mcfft_1d_device.cpp ./source/mcfft_1d_utils.cpp ./source/vkfft_utils.cpp ./benchmark/accuracy_1d.cpp
-# environment
-VSCODE_VERBOSE_LOGGING = true
 # makefile (from 'makefile', line 24)
 BIN_TARGETS = ./bin/test_1d ./bin/accuracy_1d ./bin/test_2d ./bin/accuracy_2d
 # makefile (from 'makefile', line 48)
@@ -58,15 +55,16 @@ LESSOPEN = | /usr/bin/lesspipe %s
 # environment
 VSCODE_CWD = /home/lulu
 # environment
-SSH_CONNECTION = 172.31.100.42 12172 10.67.10.86 22
+ 
+SSH_CONNECTION = 10.252.126.16 12146 10.67.10.86 22
 # environment
-PATH = /home/lulu/.vscode-server/bin/30d9c6cd9483b2cc586687151bcbcd635f373630/bin/remote-cli:/opt/rocm/opencl/bin/x86_64:/opt/rocm/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/opt/rocm/bin:/opt/rocm/profiler/bin:/opt/rocm/opencl/bin/x86_64
+PATH = /home/lulu/.vscode-server/bin/92d25e35d9bf1a6b16f7d0758f25d48ace11e5b9/bin/remote-cli:/opt/rocm/opencl/bin/x86_64:/opt/rocm/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/opt/rocm/bin:/opt/rocm/profiler/bin:/opt/rocm/opencl/bin/x86_64
 # environment
 XDG_RUNTIME_DIR = /run/user/1001
 # makefile (from 'makefile', line 7)
 WMMA_INC = /home/lulu/zsx-home/software/rocWMMA/include
 # environment
-VSCODE_LOG_STACK = false
+ELECTRON_RUN_AS_NODE = 1
 # default
 .FEATURES := target-specific order-only second-expansion else-if shortest-stem undefine oneshell archives jobserver output-sync check-symlink load
 # environment
@@ -74,11 +72,9 @@ LS_COLORS =
 # automatic
 %F = $(notdir $%)
 # environment
-VSCODE_PIPE_LOGGING = true
-# environment
 PWD = /home/lulu/zsx-home/his-deve/mcfft-float
 # environment
-VSCODE_IPC_HOOK_CLI = /run/user/1001/vscode-ipc-a0f497cf-52fe-4415-abe5-60dd6e440b8b.sock
+VSCODE_IPC_HOOK_CLI = /run/user/1001/vscode-ipc-82bdf817-5538-41bd-b306-3ae923532ddb.sock
 # automatic
 *D = $(patsubst %/,%,$(dir $*))
 # makefile (from 'makefile', line 9)
@@ -118,11 +114,10 @@ MAKECMDGOALS := all
 SHLVL = 3
 # makefile (from 'makefile', line 30)
 LIB_USE = -lfftw3 -lrocfft
- 
 # makefile (from 'makefile', line 28)
 CC = /opt/rocm-4.5.2/bin/hipcc
 # environment
-XDG_SESSION_ID = 1787
+XDG_SESSION_ID = 8
 # environment
 USER = lulu
 # makefile
@@ -139,21 +134,21 @@ SRC_2D_T = ./source/mcfft_2d_device.cpp ./source/mcfft_2d_utils.cpp ./source/vkf
 .VARIABLES := 
 # automatic
 *F = $(notdir $*)
- 
 # environment
 LANGUAGE = en_US:en
 # makefile
 MAKEFLAGS = pqrR
 # environment
 MFLAGS = -pqrR
+ 
 # environment
-SSH_CLIENT = 172.31.100.42 12172 22
+SSH_CLIENT = 10.252.126.16 12146 22
 # environment
 MAIL = /var/mail/lulu
 # automatic
 +D = $(patsubst %/,%,$(dir $+))
 # environment
-BROWSER = /home/lulu/.vscode-server/bin/30d9c6cd9483b2cc586687151bcbcd635f373630/bin/helpers/browser.sh
+BROWSER = /home/lulu/.vscode-server/bin/92d25e35d9bf1a6b16f7d0758f25d48ace11e5b9/bin/helpers/browser.sh
 # environment
 S_COLORS = auto
 # environment
@@ -164,7 +159,6 @@ ROC_INC = /opt/rocm-4.5.2/hip/include
 MAKEFILES := 
 # automatic
 <F = $(notdir $<)
- 
 # environment
 PS1 = ${debian_chroot:+($debian_chroot)}\u@\h:\w\$ \[\e]1337;CurrentDir=$(pwd)\a\]
 # makefile (from 'makefile', line 22)
@@ -180,21 +174,18 @@ SUFFIXES :=
 # default
 .INCLUDE_DIRS = /usr/include /usr/local/include /usr/include
 # default
- 
 .RECIPEPREFIX := 
 # default
 MAKE_HOST := x86_64-pc-linux-gnu
 # makefile (from 'makefile', line 11)
+ 
 ROC_LIB = /opt/rocm-4.5.2/lib
 # environment
 LANG = C
-# environment
-VSCODE_EXTHOST_WILL_SEND_SOCKET = true
 # variable set hash-table stats:
-# Load=87/1024=8%, Rehash=0, Collisions=11/121=9%
+# Load=83/1024=8%, Rehash=0, Collisions=11/117=9%
 
 # Pattern-specific Variable Values
- 
 
 # No pattern-specific variable values.
 
@@ -205,6 +196,7 @@ VSCODE_EXTHOST_WILL_SEND_SOCKET = true
 # 15 files, no impossibilities in 1 directories.
 
 # Implicit Rules
+ 
 
 # No implicit rules.
 
@@ -224,8 +216,8 @@ ALL: bin/test_1d bin/accuracy_1d bin/test_2d bin/accuracy_2d
 a:
 #  Phony target (prerequisite of .PHONY).
 #  Implicit rule search has not been done.
-#  File does not exist.
  
+#  File does not exist.
 #  File has not been updated.
 #  recipe to execute (from 'makefile', line 60):
 	./bin/test_1d -n 256 -b 262144
@@ -242,9 +234,9 @@ c:
 #  Phony target (prerequisite of .PHONY).
 #  Implicit rule search has not been done.
 #  File does not exist.
- 
 #  File has not been updated.
 #  recipe to execute (from 'makefile', line 66):
+ 
 	LD_LIBRARY_PATH=/home/lulu/zsx-home/software/rocWMMA/lib:/home/lulu/zsx-home/software/rocm-4.5.0/rocfft/lib:$$LD_LIBRARY_PATH
 
 d:
@@ -263,12 +255,12 @@ all:
 #  File has been updated.
 #  Successfully updated.
 
+ 
 .PHONY: all test clean a b c d
 #  Implicit rule search has not been done.
 #  Modification time never checked.
 #  File has not been updated.
 
- 
 # Not a target:
 source/mcfft_1d_utils.cpp:
 #  Implicit rule search has not been done.
@@ -281,11 +273,11 @@ bin/test_2d: source/mcfft_2d_device.cpp source/mcfft_2d_utils.cpp source/vkfft_u
 #  File has not been updated.
 #  recipe to execute (from 'makefile', line 41):
 	$(call Mkdir, ${BIN_DIR})
+ 
 	${CC} ${CFLAGS} ${INC_DIR} ${LIB_DIR} ${LIB_USE} ${SRC_2D_T} -o $@
 
 test:
 #  Phony target (prerequisite of .PHONY).
- 
 #  Implicit rule search has not been done.
 #  File does not exist.
 #  File has not been updated.
@@ -295,15 +287,15 @@ test:
 # Not a target:
 makefile:
 #  Implicit rule search has been done.
-#  Last modified 2022-07-02 07:39:08.152787343
+#  Last modified 2022-07-14 05:54:51.746115518
 #  File has been updated.
 #  Successfully updated.
 
+ 
 # Not a target:
 source/mcfft_1d_device.cpp:
 #  Implicit rule search has not been done.
 #  Modification time never checked.
- 
 #  File has not been updated.
 
 # Not a target:
@@ -322,10 +314,10 @@ benchmark/accuracy_1d.cpp:
 source/mcfft_2d_device.cpp:
 #  Implicit rule search has not been done.
 #  Modification time never checked.
- 
 #  File has not been updated.
 
 # Not a target:
+ 
 .DEFAULT:
 #  Implicit rule search has not been done.
 #  Modification time never checked.
@@ -339,13 +331,13 @@ clean:
 
 bin/accuracy_1d: source/mcfft_1d_device.cpp source/mcfft_1d_utils.cpp source/vkfft_utils.cpp benchmark/accuracy_1d.cpp
 #  Implicit rule search has not been done.
- 
 #  Modification time never checked.
 #  File has not been updated.
 #  recipe to execute (from 'makefile', line 37):
 	$(call Mkdir, ${BIN_DIR})
 	${CC} ${CFLAGS} ${INC_DIR} ${LIB_DIR} ${LIB_USE} ${SRC_1D_A} -o $@
 
+ 
 # Not a target:
 benchmark/accuracy_2d.cpp:
 #  Implicit rule search has not been done.
@@ -359,7 +351,6 @@ source/vkfft_utils.cpp:
 #  File has not been updated.
 
 # Not a target:
- 
 benchmark/test_1d.cpp:
 #  Implicit rule search has not been done.
 #  Modification time never checked.
@@ -367,6 +358,7 @@ benchmark/test_1d.cpp:
 
 bin/accuracy_2d: source/mcfft_2d_device.cpp source/mcfft_2d_utils.cpp source/vkfft_utils.cpp benchmark/accuracy_2d.cpp
 #  Implicit rule search has not been done.
+ 
 #  Modification time never checked.
 #  File has not been updated.
 #  recipe to execute (from 'makefile', line 45):
@@ -376,7 +368,6 @@ bin/accuracy_2d: source/mcfft_2d_device.cpp source/mcfft_2d_utils.cpp source/vkf
 bin/test_1d: source/mcfft_1d_device.cpp source/mcfft_1d_utils.cpp source/vkfft_utils.cpp benchmark/test_1d.cpp
 #  Implicit rule search has not been done.
 #  Modification time never checked.
- 
 #  File has not been updated.
 #  recipe to execute (from 'makefile', line 33):
 	$(call Mkdir, ${BIN_DIR})
@@ -390,12 +381,13 @@ bin/test_1d: source/mcfft_1d_device.cpp source/mcfft_1d_utils.cpp source/vkfft_u
 
 # No general ('VPATH' variable) search path.
 
+ 
 # strcache buffers: 1 (0) / strings = 40 / storage = 456 B / avg = 11 B
 # current buf: size = 8162 B / used = 456 B / count = 40 / avg = 11 B
 
 # strcache performance: lookups = 73 / hit rate = 45%
 # hash-table stats:
 # Load=40/8192=0%, Rehash=0, Collisions=3/73=4%
-# Finished Make data base on Sat Jul  2 07:39:32 2022
+# Finished Make data base on Sat Jul 16 05:01:17 2022
 
  

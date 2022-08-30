@@ -10,6 +10,7 @@
         "string": "cpp",
         "string_view": "cpp",
         "iterator": "cpp",
-        "vector": "cpp"
+        "vector": "cpp",
+        "algorithm": "cpp"
     }
 }

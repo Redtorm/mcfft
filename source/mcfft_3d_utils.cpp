@@ -1,4 +1,4 @@
-#include "../include/mcfft_2d_device.h"
+#include "../include/mcfft_3d_device.h"
 
 int *rev_x, *rev_y, Nx, Ny, N_batch;
 MCTYPE *in_host;

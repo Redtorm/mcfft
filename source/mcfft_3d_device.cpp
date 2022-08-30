@@ -1,5 +1,5 @@
 #define __HIP_PLATFORM_HCC__
-#include "../include/mcfft_2d_device.h"
+#include "../include/mcfft_3d_device.h"
 
 using namespace rocwmma;
 

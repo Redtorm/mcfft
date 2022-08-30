@@ -1,5 +1,12 @@
-make --dry-run --keep-going --print-directory
+make --dry-run --always-make --keep-going --print-directory
 make: Entering directory '/home/lulu/zsx-home/his-deve/mcfft-float'
+ 
+/opt/rocm-4.5.2/bin/hipcc -g -w -std=c++14  -I./include -I/usr/include -I./vkFFT -I/home/lulu/zsx-home/software/rocWMMA/include -I/opt/rocm-4.5.2/hip/include -I/home/lulu/zsx-home/software/rocm-4.5.0/rocfft/include -L/usr/lib/x86_64-linux-gnu/ -L/home/lulu/zsx-home/software/rocWMMA/lib -L/opt/rocm-4.5.2/lib -L/home/lulu/zsx-home/software/rocm-4.5.0/rocfft/lib -lfftw3 -lrocfft ./source/mcfft_1d_device.cpp ./source/mcfft_1d_utils.cpp ./source/vkfft_utils.cpp ./benchmark/test_1d.cpp -o bin/test_1d
+ 
+/opt/rocm-4.5.2/bin/hipcc -g -w -std=c++14  -I./include -I/usr/include -I./vkFFT -I/home/lulu/zsx-home/software/rocWMMA/include -I/opt/rocm-4.5.2/hip/include -I/home/lulu/zsx-home/software/rocm-4.5.0/rocfft/include -L/usr/lib/x86_64-linux-gnu/ -L/home/lulu/zsx-home/software/rocWMMA/lib -L/opt/rocm-4.5.2/lib -L/home/lulu/zsx-home/software/rocm-4.5.0/rocfft/lib -lfftw3 -lrocfft ./source/mcfft_1d_device.cpp ./source/mcfft_1d_utils.cpp ./source/vkfft_utils.cpp ./benchmark/accuracy_1d.cpp -o bin/accuracy_1d
+ 
 /opt/rocm-4.5.2/bin/hipcc -g -w -std=c++14  -I./include -I/usr/include -I./vkFFT -I/home/lulu/zsx-home/software/rocWMMA/include -I/opt/rocm-4.5.2/hip/include -I/home/lulu/zsx-home/software/rocm-4.5.0/rocfft/include -L/usr/lib/x86_64-linux-gnu/ -L/home/lulu/zsx-home/software/rocWMMA/lib -L/opt/rocm-4.5.2/lib -L/home/lulu/zsx-home/software/rocm-4.5.0/rocfft/lib -lfftw3 -lrocfft ./source/mcfft_2d_device.cpp ./source/mcfft_2d_utils.cpp ./source/vkfft_utils.cpp ./benchmark/test_2d.cpp -o bin/test_2d
+ 
+/opt/rocm-4.5.2/bin/hipcc -g -w -std=c++14  -I./include -I/usr/include -I./vkFFT -I/home/lulu/zsx-home/software/rocWMMA/include -I/opt/rocm-4.5.2/hip/include -I/home/lulu/zsx-home/software/rocm-4.5.0/rocfft/include -L/usr/lib/x86_64-linux-gnu/ -L/home/lulu/zsx-home/software/rocWMMA/lib -L/opt/rocm-4.5.2/lib -L/home/lulu/zsx-home/software/rocm-4.5.0/rocfft/lib -lfftw3 -lrocfft ./source/mcfft_2d_device.cpp ./source/mcfft_2d_utils.cpp ./source/vkfft_utils.cpp ./benchmark/accuracy_2d.cpp -o bin/accuracy_2d
 make: Leaving directory '/home/lulu/zsx-home/his-deve/mcfft-float'
  

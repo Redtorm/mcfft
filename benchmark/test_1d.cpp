@@ -6,6 +6,7 @@
 #include "rocfft.h"
 #include "../vkFFT/vkFFT.h"
 #include "../include/utils_VkFFT.h"
+#include "../include/half.hpp"
 
 #define T_MIN 4
 #define MAX_TIMES (1 << 30)
@@ -20,21 +21,21 @@ double gettime()
     return tv.tv_usec * 1.0e-6 + tv.tv_sec;
 }
 
-void double2float(double * data, float *res, int n){
+void double2MCTYPE(double * data, MCTYPE *res, int n){
     for(int i = 0; i < n; i++){
-        res[i] = (float)data[i];
+        res[i] = (MCTYPE)data[i];
     }
 }
 
-void rocfft_get_result(float *data, float *result, int n, int n_batch){
+void rocfft_get_result(MCTYPE *data, MCTYPE *result, int n, int n_batch){
     const size_t length = n;
     bool inplace = true;
-    float* x = NULL;
-    hipMalloc(&x, n * 2 * sizeof(float) * n_batch);
-    float* y = NULL;
-    //hipMalloc(&y, n * 2 * sizeof(float) * n_batch);
+    MCTYPE* x = NULL;
+    hipMalloc(&x, n * 2 * sizeof(MCTYPE) * n_batch);
+    MCTYPE* y = NULL;
+    //hipMalloc(&y, n * 2 * sizeof(MCTYPE) * n_batch);
 
-    hipMemcpy(x, data, n * n_batch * 2 * sizeof(float), hipMemcpyHostToDevice);
+    hipMemcpy(x, data, n * n_batch * 2 * sizeof(MCTYPE), hipMemcpyHostToDevice);
 
     rocfft_setup();
     rocfft_status status = rocfft_status_success;
@@ -44,7 +45,7 @@ void rocfft_get_result(float *data, float *result, int n, int n_batch){
     status              = rocfft_plan_create(&forward,
                                 inplace ? rocfft_placement_inplace : rocfft_placement_notinplace,
                                 rocfft_transform_type_complex_forward,
-                                rocfft_precision_single,
+                                rocfft_precision_double,
                                 1, // Dimensions
                                 &length, // lengths
                                 n_batch, // Number of transforms
@@ -91,7 +92,7 @@ void rocfft_get_result(float *data, float *result, int n, int n_batch){
 
     assert(status == rocfft_status_success);
 
-    hipMemcpy(result, x, n * n_batch * 2 * sizeof(float), hipMemcpyDeviceToHost);
+    hipMemcpy(result, x, n * n_batch * 2 * sizeof(MCTYPE), hipMemcpyDeviceToHost);
 
     // printf("~~~~~~~~~~~~rocfft~~~~~~~~~~~~\n");
     // for(int i = 0; i < 256*256; i++){
@@ -101,7 +102,7 @@ void rocfft_get_result(float *data, float *result, int n, int n_batch){
     // printf("~~~~~~~~~~~~~~~~~~~~~~~~\n");
 }
 
-void vkfft_get_result(float *data, float *result, int n, int n_batch){
+void vkfft_get_result(MCTYPE2 *data, MCTYPE *result, int n, int n_batch){
     VkGPU vkGPU = {};
     VkFFTConfiguration configuration = {};
 	VkFFTApplication app = {};
@@ -110,36 +111,37 @@ void vkfft_get_result(float *data, float *result, int n, int n_batch){
     configuration.size[1] = 1;
 	configuration.size[2] = 1;
 	//configuration.doublePrecision = true;
-	configuration.useLUT = true; //use twiddle factor table
+	//configuration.useLUT = true; //use twiddle factor table
 	configuration.makeForwardPlanOnly = true; 
     //configuration.inverseReturnToInputBuffer = 1;
     configuration.numberBatches = n_batch;
     configuration.device = &vkGPU.device;
+    //configuration.halfPrecision = true;
 
-    uint64_t inputBufferSize = (uint64_t)sizeof(float) * 2 * configuration.size[0] * configuration.size[1] * configuration.size[2] * n_batch;
-	hipFloatComplex* inputBuffer = 0;
-	hipMalloc((void **)&inputBuffer, inputBufferSize);
+    // uint64_t inputBufferSize = (uint64_t)sizeof(MCTYPE) * 2 * configuration.size[0] * configuration.size[1] * configuration.size[2] * n_batch;
+	// hipFloatComplex* inputBuffer = 0;
+	// hipMalloc((void **)&inputBuffer, inputBufferSize);
     
-    uint64_t bufferSize = (uint64_t)sizeof(float) * 2 * configuration.size[0] * configuration.size[1] * configuration.size[2] * n_batch;
-    hipFloatComplex* buffer;
+    uint64_t bufferSize = (uint64_t)sizeof(MCTYPE) * 2 * configuration.size[0] * configuration.size[1] * configuration.size[2] * n_batch;
+    hipFloatComplex* buffer = 0;
     hipMalloc((void**)&buffer, bufferSize);
 
-    configuration.inputBufferNum = 1;
+    //configuration.inputBufferNum = 1;
     configuration.bufferNum = 1;
     configuration.bufferSize = &bufferSize;
-    configuration.isInputFormatted = 1;
-    configuration.inputBufferStride[0] = configuration.size[0];
-    configuration.inputBufferStride[1] = configuration.size[0] * configuration.size[1];
-    configuration.inputBufferStride[2] = configuration.size[0] * configuration.size[1] * configuration.size[2];
-    configuration.inputBufferSize = &inputBufferSize;
+    // configuration.isInputFormatted = 1;
+    // configuration.inputBufferStride[0] = configuration.size[0];
+    // configuration.inputBufferStride[1] = configuration.size[0] * configuration.size[1];
+    // configuration.inputBufferStride[2] = configuration.size[0] * configuration.size[1] * configuration.size[2];
+    //configuration.inputBufferSize = &inputBufferSize;
 	
-	hipMemcpy(inputBuffer, data, bufferSize, hipMemcpyHostToDevice);
+	hipMemcpy(buffer, data, bufferSize, hipMemcpyHostToDevice);
 
     /*   Initialize, get FFT Kernel   */
     initializeVkFFT(&app, configuration);
 
 	VkFFTLaunchParams launchParams = {};
-    launchParams.inputBuffer = (void**)&inputBuffer;
+    //launchParams.inputBuffer = (void**)&inputBuffer;
 	launchParams.buffer = (void**)&buffer;
 
 	//hipMemcpy(tmpbuffer, buffer_input, bufferSize, hipMemcpyHostToDevice);
@@ -159,7 +161,7 @@ void vkfft_get_result(float *data, float *result, int n, int n_batch){
 
     double tflops = 12.0 * n * std::log(n) * 1e-12 / std::log(2.0) * n_batch * iter / runtime;
     printf("@vkfft > n: %d, n_batch: %d, iter: %d, time per iter: %e, tflops: %lf \n", n, n_batch, iter, runtime / iter, tflops);
-    hipMemcpy(result, buffer, inputBufferSize, hipMemcpyDeviceToHost);
+    hipMemcpy(result, buffer, bufferSize, hipMemcpyDeviceToHost);
 
     // printf("~~~~~~~~~~~vkfft~~~~~~~~~~~~~\n");
     // for(int i = 0; i < 256*256; i++){
@@ -221,12 +223,12 @@ int main(int argc, char* argv[])
     double* data = (double*)malloc(sizeof(double) * n * n_batch * 2);
     generate_data(data, n, n_batch);
     
-    float* out = (float*)malloc(sizeof(float) * n * n_batch * 2);
-    float* in = (float*)malloc(sizeof(float) * n * n_batch * 2);
+    MCTYPE* out = (MCTYPE*)malloc(sizeof(MCTYPE) * n * n_batch * 2);
+    MCTYPE* in = (MCTYPE*)malloc(sizeof(MCTYPE) * n * n_batch * 2);
 
-    double2float(data, in, n * n_batch * 2);
+    double2MCTYPE(data, in, n * n_batch * 2);
 
-    vkfft_get_result(in, out, n, n_batch);
+    //vkfft_get_result((MCTYPE2*)in, out, n, n_batch);
   
     rocfft_get_result(in, out, n, n_batch);
 

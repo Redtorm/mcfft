@@ -2,7 +2,7 @@
 #include <cstring>
 #include <cmath>
 #include <sys/time.h>
-#include "../include/mcfft_2d_utils.h"
+#include "../include/mcfft_3d_utils.h"
 #include "rocfft.h"
 #include "../vkFFT/vkFFT.h"
 #include "../include/utils_VkFFT.h"
@@ -26,15 +26,15 @@ void double2MCTYPE(double * data, MCTYPE *res, int n){
     }
 }
 
-void rocfft_get_result(MCTYPE *data, MCTYPE *result, int nx, int ny, int n_batch){
-    const size_t lengths[2] = {(size_t)ny, (size_t)nx};
+void rocfft_get_result(MCTYPE *data, MCTYPE *result, int nx, int ny, int nz, int n_batch){
+    const size_t lengths[3] = {(size_t)ny, (size_t)nx, (size_t)nz};
     bool inplace = true;
     MCTYPE* x = NULL;
-    hipMalloc(&x, nx * ny * 2 * sizeof(MCTYPE) * n_batch);
+    hipMalloc(&x, nx * ny * nz * 2 * sizeof(MCTYPE) * n_batch);
     MCTYPE* y = NULL;
     //hipMalloc(&y, n * 2 * sizeof(MCTYPE) * n_batch);
 
-    hipMemcpy(x, data, nx * ny * n_batch * 2 * sizeof(MCTYPE), hipMemcpyHostToDevice);
+    hipMemcpy(x, data, nx * ny * nz * n_batch * 2 * sizeof(MCTYPE), hipMemcpyHostToDevice);
 
     rocfft_setup();
     rocfft_status status = rocfft_status_success;
@@ -44,8 +44,8 @@ void rocfft_get_result(MCTYPE *data, MCTYPE *result, int nx, int ny, int n_batch
     status              = rocfft_plan_create(&forward,
                                 inplace ? rocfft_placement_inplace : rocfft_placement_notinplace,
                                 rocfft_transform_type_complex_forward,
-                                rocfft_precision_single,
-                                2, // Dimensions
+                                rocfft_precision_double,
+                                3, // Dimensions
                                 lengths, // lengths
                                 n_batch, // Number of transforms
                                 NULL); // Description
@@ -86,12 +86,12 @@ void rocfft_get_result(MCTYPE *data, MCTYPE *result, int nx, int ny, int n_batch
     }
 
 
-    double tflops = 12.0 * nx * ny * std::log(nx * ny) * 1e-12 / std::log(2.0) * n_batch * iter / runtime;
-    printf("@rocfft > x: %d, y: %d, n_batch: %d, iter: %d, time per iter: %e, tflops: %lf \n", nx, ny, n_batch, iter, runtime / iter, tflops);
+    double tflops = 12.0 * nx * ny * nz * std::log(nx * ny * nz) * 1e-12 / std::log(2.0) * n_batch * iter / runtime;
+    printf("@rocfft > x: %d, y: %d, z: %d, n_batch: %d, iter: %d, time per iter: %e, tflops: %lf \n", nx, ny, nz, n_batch, iter, runtime / iter, tflops);
 
     assert(status == rocfft_status_success);
 
-    hipMemcpy(result, x, nx * ny * n_batch * 2 * sizeof(MCTYPE), hipMemcpyDeviceToHost);
+    hipMemcpy(result, x, nx * ny * nz * n_batch * 2 * sizeof(MCTYPE), hipMemcpyDeviceToHost);
 
     // printf("~~~~~~~~~~~~rocfft~~~~~~~~~~~~\n");
     // for(int i = 0; i < 256*256; i++){
@@ -192,9 +192,9 @@ void mcfft_get_result(double *data, double *result, int nx, int ny, int n_batch)
 
 int main(int argc, char* argv[])
 {
-    int nx = 256, ny = 256, n_batch = 1;
+    int nx = 256, ny = 256, nz = 256, n_batch = 1;
     char opt_c = 0;
-    while (EOF != (opt_c = getopt(argc, argv, "x:y:b:")))
+    while (EOF != (opt_c = getopt(argc, argv, "x:y:z:b:")))
     {
         switch (opt_c)
         {
@@ -203,6 +203,8 @@ int main(int argc, char* argv[])
             break;
         case 'y':
             ny = atoi(optarg);
+        case 'z':
+            nz = atoi(optarg);
         case 'b':
             n_batch = atoi(optarg);
         break;
@@ -215,20 +217,20 @@ int main(int argc, char* argv[])
         }
     }
 
-    double* data = (double*)malloc(sizeof(double) * nx * ny * n_batch * 2);
-    generate_data(data, nx * ny, n_batch);
+    double* data = (double*)malloc(sizeof(double) * nx * ny * nz * n_batch * 2);
+    generate_data(data, nx * ny * nz, n_batch);
     
     MCTYPE* out = (MCTYPE*)malloc(sizeof(MCTYPE) * nx * ny * n_batch * 2);
-    MCTYPE* in = (MCTYPE*)malloc(sizeof(MCTYPE) * nx * ny * n_batch * 2);
+    // MCTYPE* in = (MCTYPE*)malloc(sizeof(MCTYPE) * nx * ny * n_batch * 2);
 
-    double2MCTYPE(data, in, nx * ny * n_batch * 2);
+    //double2MCTYPE(data, in, nx * ny * n_batch * 2);
 
     //vkfft_get_result(in, out, nx, ny, n_batch);
   
-    rocfft_get_result(in, out, nx, ny, n_batch);
+    rocfft_get_result(data, out, nx, ny, nz, n_batch);
 
-    double* res = (double*)malloc(sizeof(double) * nx * ny * n_batch * 2);
-    mcfft_get_result(data, res, nx, ny, n_batch);   
+    //double* res = (double*)malloc(sizeof(double) * nx * ny * n_batch * 2);
+    //mcfft_get_result(data, res, nx, ny, n_batch);   
 
     return 0;
 }
